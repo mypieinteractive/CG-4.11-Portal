@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.4
-// Changes: Added totalEvents to the JSON payload in saveToDatabase(). Updated renderCalendar() to output the new circular HTML structure for accepted/invited stats.
+// Version: V1.5
+// Changes: Rewrote the renderCalendar() loop to chunk by weeks. Implemented slot assignment to visually align multi-day events across adjacent cards. Added dynamic colorization for multi-day events. Moved the [+] add button to a new footer div.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -301,70 +301,137 @@ function renderCalendar() {
     endOfGridWeek.setDate(endOfGridWeek.getDate() + 5); 
 
     let currentLoopDate = new Date(startOfGrid);
+    
+    // Palette for multi-day events
+    const palette = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', '#6C5CE7', '#fd79a8', '#00b894', '#e17055'];
 
+    // Process week by week to align slots
     while (currentLoopDate <= endOfGridWeek) {
-        if (currentLoopDate.getDay() === 0) {
-            currentLoopDate.setDate(currentLoopDate.getDate() + 1);
-            continue;
+        
+        // 1. Gather all dates for the current Mon-Sat week
+        let weekDates = [];
+        for(let i = 0; i < 6; i++) {
+            let d = new Date(currentLoopDate);
+            d.setDate(d.getDate() + i);
+            weekDates.push(formatDateObj(d));
         }
 
-        const dateString = formatDateObj(currentLoopDate);
-        const dayEvents = eventsData.filter(event => event.date === dateString);
+        // 2. Extract this week's events
+        let weekEvents = eventsData.filter(ev => weekDates.includes(ev.date));
+        let isWeekEmpty = weekEvents.length === 0;
+
+        // 3. Slot assignment logic for vertical alignment
+        let uniqueEventNames = [...new Set(weekEvents.map(e => e.name))];
         
-        const isMonday = currentLoopDate.getDay() === 1;
-        const isSaturday = currentLoopDate.getDay() === 6;
-        const isEmpty = dayEvents.length === 0;
-
-        let totalInvited = 0;
-        let totalAccepted = 0;
-        let eventsHtml = '';
-
-        dayEvents.forEach(ev => {
-            totalInvited += ev.invited;
-            totalAccepted += ev.accepted;
-            const hasNotes = ev.notes && ev.notes.trim().length > 0;
-            
-            eventsHtml += `
-                <div class="event-card ${hasNotes ? 'has-notes' : ''}" onclick="openEditModal('${ev.id}')">
-                    ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
-                    <div class="event-name">${ev.name}</div>
-                    <div class="event-stats">
-                        <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
-                        <span class="stat-divider">/</span>
-                        <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
-                    </div>
-                </div>
-            `;
+        uniqueEventNames.sort((a, b) => {
+            let aDate = weekEvents.find(e => e.name === a).date;
+            let bDate = weekEvents.find(e => e.name === b).date;
+            if (aDate === bDate) return a.localeCompare(b);
+            return aDate.localeCompare(bDate);
         });
 
-        const cellDiv = document.createElement('div');
-        cellDiv.className = `day-cell ${isSaturday ? 'weekend' : ''} ${(isMonday && isEmpty) ? 'dimmed-empty' : ''}`;
-        
-        const cellDateLabel = `${currentLoopDate.getMonth() + 1}/${currentLoopDate.getDate()}`;
-        
-        const totalsHtml = isEmpty ? '' : `
-            <div class="header-totals">
-                <span class="stat-circle accepted-circle" title="Total Accepted">${totalAccepted}</span>
-                <span class="stat-divider">/</span>
-                <span class="stat-circle invited-circle" title="Total Invited">${totalInvited}</span>
-            </div>
-        `;
+        let eventStyling = {};
+        uniqueEventNames.forEach((name, index) => {
+            let occurrences = weekEvents.filter(e => e.name === name).length;
+            let color = palette[index % palette.length];
+            eventStyling[name] = {
+                slot: index,
+                isMulti: occurrences > 1,
+                color: color
+            };
+        });
 
-        cellDiv.innerHTML = `
-            <div class="cell-header">
-                <div class="header-left-col">
-                    <span>${cellDateLabel}</span>
+        let maxSlots = uniqueEventNames.length;
+
+        // 4. Render the 6 days
+        for(let i = 0; i < 6; i++) {
+            let d = new Date(currentLoopDate);
+            d.setDate(d.getDate() + i);
+            const dateString = formatDateObj(d);
+            const isMonday = d.getDay() === 1;
+            const isSaturday = d.getDay() === 6;
+
+            const dayEvents = weekEvents.filter(ev => ev.date === dateString);
+            const isEmpty = dayEvents.length === 0;
+
+            let totalInvited = 0;
+            let totalAccepted = 0;
+            let eventsHtml = '';
+
+            if (!isWeekEmpty) {
+                // Render assigned slots to maintain alignment across days
+                for (let s = 0; s < maxSlots; s++) {
+                    let ev = dayEvents.find(e => eventStyling[e.name].slot === s);
+                    
+                    if (ev) {
+                        totalInvited += ev.invited;
+                        totalAccepted += ev.accepted;
+                        const hasNotes = ev.notes && ev.notes.trim().length > 0;
+                        const style = eventStyling[ev.name];
+                        
+                        let cardStyle = '';
+                        if (style.isMulti) {
+                            // Assign border color and a 20% opacity background color (33 is hex for 20%)
+                            cardStyle = `style="border-left-color: ${style.color}; background-color: ${style.color}33;"`;
+                        }
+
+                        eventsHtml += `
+                            <div class="event-card ${hasNotes ? 'has-notes' : ''}" onclick="openEditModal('${ev.id}')" ${cardStyle}>
+                                ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
+                                <div class="event-name">${ev.name}</div>
+                                <div class="event-stats">
+                                    <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
+                                    <span class="stat-divider">/</span>
+                                    <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // Invisible placeholder to keep the grid slots perfectly aligned
+                        eventsHtml += `
+                            <div class="event-card" style="visibility: hidden; pointer-events: none;">
+                                <div class="event-name">&nbsp;</div>
+                                <div class="event-stats"><span class="stat-divider">&nbsp;</span></div>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            const cellDiv = document.createElement('div');
+            // Apply a 'collapsed' class if the entire week has 0 events
+            cellDiv.className = `day-cell ${isSaturday ? 'weekend' : ''} ${(isMonday && isEmpty) ? 'dimmed-empty' : ''} ${isWeekEmpty ? 'collapsed' : ''}`;
+            
+            const cellDateLabel = `${d.getMonth() + 1}/${d.getDate()}`;
+            
+            const totalsHtml = isEmpty ? '' : `
+                <div class="header-totals">
+                    <span class="stat-circle accepted-circle" title="Total Accepted">${totalAccepted}</span>
+                    <span class="stat-divider">/</span>
+                    <span class="stat-circle invited-circle" title="Total Invited">${totalInvited}</span>
+                </div>
+            `;
+
+            cellDiv.innerHTML = `
+                <div class="cell-header">
+                    <div class="header-left-col">
+                        <span>${cellDateLabel}</span>
+                    </div>
+                    ${totalsHtml}
+                </div>
+                <div class="cell-events">
+                    ${eventsHtml}
+                </div>
+                <div class="cell-footer">
                     <button class="add-btn" onclick="openAddModal('${dateString}')" title="Add Event">+</button>
                 </div>
-                ${totalsHtml}
-            </div>
-            <div class="cell-events">
-                ${eventsHtml}
-            </div>
-        `;
+            `;
 
-        calendarGrid.appendChild(cellDiv);
-        currentLoopDate.setDate(currentLoopDate.getDate() + 1);
+            calendarGrid.appendChild(cellDiv);
+        }
+
+        // Jump exactly 7 days to the next Monday chunk
+        currentLoopDate.setDate(currentLoopDate.getDate() + 7);
     }
 }
 
