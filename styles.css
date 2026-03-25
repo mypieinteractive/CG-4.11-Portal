@@ -1,5 +1,5 @@
-/* Version: V1.1 */
-/* Changes: Replaced single-week scroll logic with a responsive 42-cell grid using fraction units. Designed compact header for the upload module. Shrunk fonts to ensure data fits securely within an embedded Glide app without horizontal scrolling. */
+/* Version: V1.2 */
+/* Changes: Restyled header to fit all elements left/right, updated CSS grid to 6 columns, added semi-transparent Monday class, allowed event names to wrap, and aligned cell headers/stats left/right. */
 :root {
     --bg-color: #121212;
     --surface-color: #1E1E2F;
@@ -25,7 +25,7 @@ body {
     background-color: var(--bg-color);
     color: var(--text-primary);
     padding: 10px;
-    font-size: 14px; /* Scaled down for embed */
+    font-size: 14px; 
 }
 
 .dashboard-container {
@@ -37,7 +37,7 @@ body {
     gap: 15px;
 }
 
-/* Header & Upload Module */
+/* Consolidated Header */
 .header {
     display: flex;
     justify-content: space-between;
@@ -46,20 +46,52 @@ body {
     padding: 12px 20px;
     border-radius: 10px;
     border: 1px solid var(--border-color);
+    flex-wrap: wrap; /* Allows stacking on very small screens */
+    gap: 15px;
 }
 
-.header-info h1 {
+.header-left {
+    display: flex;
+    align-items: center;
+}
+
+.title-group h1 {
     font-size: 1.2rem;
     margin-bottom: 4px;
 }
 
-.status {
-    font-size: 0.8rem;
+.title-group h2 {
+    font-size: 0.95rem;
     color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.status-group {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.status {
+    font-size: 0.85rem;
+    font-weight: bold;
 }
 
 .status.success { color: var(--accepted-color); }
 .status.error { color: #EF476F; }
+
+.last-updated {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
 
 .upload-module {
     display: flex;
@@ -85,37 +117,6 @@ body {
     box-shadow: 0 0 10px var(--accent-hover);
 }
 
-/* Controls */
-.controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background-color: var(--surface-color);
-    padding: 10px 15px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-}
-
-.controls h2 {
-    font-size: 1rem;
-    font-weight: 600;
-}
-
-.btn {
-    background-color: var(--card-color);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.2s;
-    font-size: 0.85rem;
-}
-
-.btn:hover {
-    background-color: var(--border-color);
-}
-
 /* Calendar Grid */
 .calendar-wrapper {
     width: 100%;
@@ -126,7 +127,7 @@ body {
 
 .grid-headers {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(6, 1fr); /* 6 Columns now */
     gap: 5px;
 }
 
@@ -141,8 +142,7 @@ body {
 
 .calendar-grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    /* No min-width, forces to squeeze into parent iframe */
+    grid-template-columns: repeat(6, 1fr); /* 6 Columns now */
     gap: 5px;
 }
 
@@ -153,20 +153,26 @@ body {
     flex-direction: column;
     overflow: hidden;
     border: 1px solid var(--border-color);
-    min-height: 120px; /* Minimum height for 6 weeks on a screen */
+    min-height: 120px;
 }
 
-.day-cell.weekend {
-    background-color: var(--weekend-bg);
-}
+.day-cell.weekend { background-color: var(--weekend-bg); }
+.day-cell.monday { opacity: 0.6; } /* Monday transparency */
 
 .cell-header {
-    padding: 4px 8px;
+    padding: 6px 8px;
     font-size: 0.8rem;
     font-weight: bold;
-    text-align: right;
     border-bottom: 1px solid var(--border-color);
     color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between; /* Date left, Totals right */
+    align-items: center;
+}
+
+.header-totals {
+    display: flex;
+    gap: 8px;
 }
 
 .cell-events {
@@ -175,49 +181,40 @@ body {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    overflow-y: auto;
 }
 
-/* Event Cards - Squeezed for 6-week view */
+/* Event Cards */
 .event-card {
     background-color: var(--card-color);
-    padding: 6px;
+    padding: 8px;
     border-radius: 4px;
     border-left: 3px solid var(--accent-color);
 }
 
 .event-name {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    margin-bottom: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis; /* Prevents long names from breaking flex layout */
+    margin-bottom: 6px;
+    white-space: normal; /* Allow wrapping */
+    word-wrap: break-word;
+    line-height: 1.3;
 }
 
 .event-stats {
     display: flex;
-    flex-direction: column; /* Stack vertically for tight columns */
-    font-size: 0.7rem;
-    line-height: 1.2;
+    flex-direction: column;
+    align-items: flex-end; /* Right justify text */
+    text-align: right;
+    font-size: 0.75rem;
+    line-height: 1.3;
 }
 
 .stat-invited { color: var(--invited-color); font-weight: 500;}
 .stat-accepted { color: var(--accepted-color); font-weight: 500;}
 
-/* Totals Section */
-.cell-totals {
-    background-color: rgba(0, 0, 0, 0.4);
-    padding: 4px;
-    font-size: 0.7rem;
-    display: flex;
-    justify-content: space-between;
-    border-top: 1px solid var(--border-color);
-}
-
 @media (max-width: 768px) {
-    /* Mobile Embed Adjustments */
-    .controls { flex-direction: column; gap: 10px; }
-    .event-name { white-space: normal; } /* Let text wrap if vertical space allows */
-    .cell-totals { flex-direction: column; text-align: center; }
+    .header { flex-direction: column; align-items: stretch; text-align: center; }
+    .header-left, .header-right { flex-direction: column; justify-content: center; }
+    .status-group { text-align: center; }
+    .cell-header { flex-direction: column; gap: 4px; }
 }
