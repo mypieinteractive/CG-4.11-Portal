@@ -1,5 +1,5 @@
-// Version: V1.1
-// Changes: Implemented GET and POST fetch requests to the Google Apps Script Web App for persistent data storage based on URL parameter. Altered grid generation to process a 42-day (6-week) array. Implemented automatic start-date calculation to display the week of the earliest chronological event upon loading.
+// Version: V1.2
+// Changes: Changed payload structure to include a lastUpdated timestamp. Refactored grid rendering to calculate absolute start/end weeks of the project, generating a scrollable 6-column grid (skipping Sundays). Applied proper flex alignment for headers and event totals.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -8,15 +8,14 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
 const statusIndicator = document.getElementById('status-indicator');
+const lastUpdatedLabel = document.getElementById('last-updated');
 const projectTitle = document.getElementById('project-title');
+const projectDateRange = document.getElementById('project-date-range');
 const calendarGrid = document.getElementById('calendar-grid');
-const currentPeriodLabel = document.getElementById('current-period-label');
-const prevPeriodBtn = document.getElementById('prev-period');
-const nextPeriodBtn = document.getElementById('next-period');
 
 // State
 let eventsData = [];
-let currentDate = new Date();
+let lastUpdatedDate = "";
 let projectNumber = null;
 
 // Initialize
@@ -29,6 +28,7 @@ function init() {
         fetchDatabaseData();
     } else {
         projectTitle.innerText = `No Project Selected`;
+        projectDateRange.innerText = "";
         setStatus('Add ?project=XYZ to the URL.', 'error');
         renderCalendar();
     }
@@ -47,17 +47,29 @@ function setStatus(msg, type = '') {
 
 // Database Communication (GET)
 async function fetchDatabaseData() {
-    setStatus('Loading data from database...');
+    setStatus('Loading project data...');
     try {
         const response = await fetch(`${API_URL}?project=${projectNumber}`);
         const result = await response.json();
         
-        if (result.status === 'success' && result.data && result.data.length > 0) {
-            eventsData = result.data;
-            setStatus('Data loaded successfully.', 'success');
-            setEarliestDate();
+        if (result.status === 'success' && result.data) {
+            // Handle backwards compatibility if old array format vs new object format
+            if (Array.isArray(result.data)) {
+                eventsData = result.data;
+                lastUpdatedDate = "Unknown";
+            } else {
+                eventsData = result.data.eventsData || [];
+                lastUpdatedDate = result.data.lastUpdated || "Unknown";
+            }
+
+            if(eventsData.length > 0) {
+                setStatus('Data loaded.', 'success');
+                lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
+            } else {
+                setStatus('No events found. Upload a file.', '');
+            }
         } else {
-            setStatus('No data found for this project. Upload a file.', '');
+            setStatus('No data found for this project.', '');
         }
         renderCalendar();
     } catch (error) {
@@ -71,42 +83,37 @@ async function fetchDatabaseData() {
 async function saveToDatabase() {
     if (!projectNumber) return;
     setStatus('Saving to database...');
+    
+    // Format current date for Last Updated
+    const now = new Date();
+    lastUpdatedDate = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear().toString().slice(-2)}`;
+    
+    const payload = {
+        lastUpdated: lastUpdatedDate,
+        eventsData: eventsData
+    };
+
     try {
-        // Send as text/plain to bypass Google Apps Script strict CORS preflight handling
         const response = await fetch(API_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'text/plain;charset=utf-8',
-            },
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
                 projectNumber: projectNumber,
-                eventsData: eventsData
+                eventsData: payload // Sending object instead of raw array
             })
         });
         
         const result = await response.json();
         if (result.status === 'success') {
-            setStatus('Data saved and synced globally.', 'success');
+            setStatus('Data saved.', 'success');
+            lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
         } else {
-            setStatus(`Save Error: ${result.message}`, 'error');
+            setStatus(`Save Error`, 'error');
         }
     } catch (error) {
         console.error('Save Error:', error);
         setStatus('Failed to save to database.', 'error');
     }
-}
-
-// Set view to the earliest event
-function setEarliestDate() {
-    if (eventsData.length === 0) return;
-    
-    // Parse dates safely to avoid timezone day-shifting
-    const earliest = eventsData.reduce((min, ev) => {
-        const evDate = new Date(ev.date + 'T00:00:00');
-        return evDate < min ? evDate : min;
-    }, new Date(eventsData[0].date + 'T00:00:00'));
-    
-    currentDate = earliest;
 }
 
 // Event Listeners
@@ -124,16 +131,6 @@ function setupEventListeners() {
     });
     fileInput.addEventListener('change', (e) => {
         if (e.target.files.length) handleFile(e.target.files[0]);
-    });
-
-    // Navigation jumps by 42 days (6 weeks)
-    prevPeriodBtn.addEventListener('click', () => {
-        currentDate.setDate(currentDate.getDate() - 42);
-        renderCalendar();
-    });
-    nextPeriodBtn.addEventListener('click', () => {
-        currentDate.setDate(currentDate.getDate() + 42);
-        renderCalendar();
     });
 }
 
@@ -153,8 +150,6 @@ function handleFile(file) {
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         processData(json);
         
-        // After processing, automatically jump to earliest date, render, and save
-        setEarliestDate();
         renderCalendar();
         saveToDatabase();
     };
@@ -199,6 +194,7 @@ function formatDateObj(date) {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+// Get the Monday of a given date's week
 function getStartOfWeek(date) {
     const d = new Date(date);
     const day = d.getDay(); 
@@ -206,28 +202,47 @@ function getStartOfWeek(date) {
     return new Date(d.setDate(diff));
 }
 
-// 6-Week Calendar Logic
+// Main Rendering Logic
 function renderCalendar() {
     calendarGrid.innerHTML = '';
-    const startOfFirstWeek = getStartOfWeek(currentDate);
     
-    // Calculate end of the 6-week period (42 days later minus 1)
-    const endOfPeriod = new Date(startOfFirstWeek);
-    endOfPeriod.setDate(startOfFirstWeek.getDate() + 41); 
+    if (eventsData.length === 0) {
+        projectDateRange.innerText = "No events scheduled.";
+        return;
+    }
+
+    // Find chronological start and end
+    let minDate = new Date(eventsData[0].date + 'T00:00:00');
+    let maxDate = new Date(eventsData[0].date + 'T00:00:00');
+
+    eventsData.forEach(ev => {
+        const d = new Date(ev.date + 'T00:00:00');
+        if (d < minDate) minDate = d;
+        if (d > maxDate) maxDate = d;
+    });
 
     const options = { month: 'short', day: 'numeric', year: 'numeric' };
-    currentPeriodLabel.innerText = `${startOfFirstWeek.toLocaleDateString('en-US', options)} - ${endOfPeriod.toLocaleDateString('en-US', options)}`;
+    projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', options)} - ${maxDate.toLocaleDateString('en-US', options)}`;
 
-    // Render 42 Cells (6 weeks x 7 days)
-    for (let i = 0; i < 42; i++) {
-        const colDate = new Date(startOfFirstWeek);
-        colDate.setDate(startOfFirstWeek.getDate() + i);
-        const dateString = formatDateObj(colDate);
-        
-        // Determine if weekend for styling
-        const isWeekend = colDate.getDay() === 0 || colDate.getDay() === 6;
+    // Establish Grid boundaries (Start on Monday of first event, end on Saturday of last event)
+    const startOfGrid = getStartOfWeek(minDate);
+    const endOfGridWeek = getStartOfWeek(maxDate);
+    endOfGridWeek.setDate(endOfGridWeek.getDate() + 5); // Saturday of the last week
 
+    let currentLoopDate = new Date(startOfGrid);
+
+    while (currentLoopDate <= endOfGridWeek) {
+        // Skip Sundays
+        if (currentLoopDate.getDay() === 0) {
+            currentLoopDate.setDate(currentLoopDate.getDate() + 1);
+            continue;
+        }
+
+        const dateString = formatDateObj(currentLoopDate);
         const dayEvents = eventsData.filter(event => event.date === dateString);
+        
+        const isMonday = currentLoopDate.getDay() === 1;
+        const isSaturday = currentLoopDate.getDay() === 6;
 
         let totalInvited = 0;
         let totalAccepted = 0;
@@ -238,34 +253,37 @@ function renderCalendar() {
             totalAccepted += ev.accepted;
             
             eventsHtml += `
-                <div class="event-card" title="${ev.name}">
+                <div class="event-card">
                     <div class="event-name">${ev.name}</div>
                     <div class="event-stats">
-                        <span class="stat-invited">Invited: ${ev.invited}</span>
-                        <span class="stat-accepted">Accepted: ${ev.accepted}</span>
+                        <span class="stat-invited">I: ${ev.invited}</span>
+                        <span class="stat-accepted">A: ${ev.accepted}</span>
                     </div>
                 </div>
             `;
         });
 
         const cellDiv = document.createElement('div');
-        cellDiv.className = `day-cell ${isWeekend ? 'weekend' : ''}`;
+        // Apply classes for weekend styling and Monday opacity
+        cellDiv.className = `day-cell ${isSaturday ? 'weekend' : ''} ${isMonday ? 'monday' : ''}`;
         
-        // Show month/day for the cell header
-        const cellDateLabel = `${colDate.getMonth() + 1}/${colDate.getDate()}`;
+        const cellDateLabel = `${currentLoopDate.getMonth() + 1}/${currentLoopDate.getDate()}`;
         
         cellDiv.innerHTML = `
-            <div class="cell-header">${cellDateLabel}</div>
+            <div class="cell-header">
+                <span>${cellDateLabel}</span>
+                <div class="header-totals">
+                    <span class="stat-invited" title="Total Invited">I: ${totalInvited}</span>
+                    <span class="stat-accepted" title="Total Accepted">A: ${totalAccepted}</span>
+                </div>
+            </div>
             <div class="cell-events">
                 ${eventsHtml}
-            </div>
-            <div class="cell-totals">
-                <span class="stat-invited">I: ${totalInvited}</span>
-                <span class="stat-accepted">A: ${totalAccepted}</span>
             </div>
         `;
 
         calendarGrid.appendChild(cellDiv);
+        currentLoopDate.setDate(currentLoopDate.getDate() + 1);
     }
 }
 
