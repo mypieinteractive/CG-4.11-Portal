@@ -1,5 +1,5 @@
-// Version: V1.6
-// Changes: Implemented native CSS Grid block spanning to handle multi-day events. Grouped contiguous events into spanning blocks with dynamic slots. Events are now sorted to naturally bubble single-day entries to the top. Applied dashed border separators and dual-edge coloring for multi-day sequences. 
+// Version: V1.7
+// Changes: Fixed the 2-day Excel parsing bug by removing the faulty leap-year assumption and adding a timezone offset modifier. Restored visibility to secondary day-segments so event titles show on every day of a block. Implemented chronological sorting on load/parse to handle unsorted Excel files.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -63,6 +63,8 @@ async function fetchDatabaseData() {
             }
 
             if(eventsData.length > 0) {
+                // Ensure array is chronologically sorted on load
+                eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
                 setStatus('Data loaded.', 'success');
                 lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
             } else {
@@ -158,7 +160,9 @@ function processData(data) {
 
         let dateStr = "";
         if (typeof dateVal === 'number') {
-            const dateObj = new Date((dateVal - (25569 + 1)) * 86400 * 1000); 
+            // FIX: Correct offset without +1 (25569 to 1970). Add timezone offset to prevent localized 1-day shift backward.
+            const dateObj = new Date((dateVal - 25569) * 86400 * 1000); 
+            dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
             dateStr = formatDateObj(dateObj);
         } else {
             dateStr = dateVal.toString().split(' ')[0];
@@ -175,6 +179,9 @@ function processData(data) {
             });
         }
     }
+    
+    // Sort chronologically so calendar processes events cleanly regardless of spreadsheet order
+    eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
 // Modal Logic
@@ -345,10 +352,8 @@ function renderCalendar() {
                 acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
             }, { invited: 0, accepted: 0 });
 
-            // Span background entirely to bottom
             weekHtml += `<div class="${bgClasses}" style="grid-column: ${i + 1}; grid-row: 1 / span ${maxSlots + 2};"></div>`;
             
-            // Header
             weekHtml += `
                 <div class="cell-header" style="grid-column: ${i + 1}; grid-row: 1;">
                     <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
@@ -356,7 +361,6 @@ function renderCalendar() {
                 </div>
             `;
             
-            // Footer with Add Button (always at the very bottom row of the week)
             weekHtml += `
                 <div class="cell-footer" style="grid-column: ${i + 1}; grid-row: ${maxSlots + 2};">
                     <button class="add-btn" onclick="openAddModal('${dateStr}')" title="Add Event">+</button>
@@ -377,10 +381,11 @@ function renderCalendar() {
                 const hasNotes = ev.notes && ev.notes.trim().length > 0;
                 let segmentStyle = (isMulti && idx < block.span - 1) ? `border-right: 1px dashed rgba(255,255,255,0.15);` : '';
                 
+                // REMOVED opacity mapping to make event name uniformly visible across days
                 return `
                     <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
                         ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
-                        <div class="event-name" style="${idx === 0 ? '' : 'opacity: 0; pointer-events: none;'}">${ev.name}</div>
+                        <div class="event-name">${ev.name}</div>
                         <div class="event-stats">
                             <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
                             <span class="stat-divider">/</span>
