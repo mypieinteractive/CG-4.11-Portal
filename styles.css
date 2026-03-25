@@ -1,5 +1,5 @@
-/* Version: V1.6 */
-/* Changes: Re-architected calendar layout to use week-level CSS Grids to allow event cards to natively span multiple columns. Replaced .day-cell flex layout with .week-container grids. Added .spanning-event and .day-segment classes to handle multi-day merged blocks. Styled right-border and internal vertical dividers for multi-day events. Removed font-weight bold from event-name. */
+/* Version: V1.7 */
+/* Changes: Adjusted .event-name font-size to be exactly 2px smaller using CSS calc(). */
 :root {
     --bg-color: #121212;
     --surface-color: #1E1E2F;
@@ -147,7 +147,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 
 .spanning-event {
     z-index: 2;
-    padding: 0; /* Let segments handle padding */
+    padding: 0; 
     overflow: hidden;
 }
 
@@ -163,7 +163,17 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 }
 .day-segment:hover { background-color: rgba(255, 255, 255, 0.05); }
 
-.event-name { font-size: 0.8rem; font-weight: normal; margin-bottom: 6px; white-space: normal; word-wrap: break-word; line-height: 1.3; padding-right: 15px;}
+/* Updated Event Name font-size to strictly be 2px smaller */
+.event-name { 
+    font-size: calc(0.8rem - 2px); 
+    font-weight: normal; 
+    margin-bottom: 6px; 
+    white-space: normal; 
+    word-wrap: break-word; 
+    line-height: 1.3; 
+    padding-right: 15px;
+}
+
 .note-icon { position: absolute; top: 6px; right: 6px; color: #FCA311; font-size: 0.9rem; }
 
 /* Circular Stats */
