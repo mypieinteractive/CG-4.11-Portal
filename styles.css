@@ -1,6 +1,5 @@
-/* File: styles.css */
-/* Version: V1.5 */
-/* Changes: Removed font-weight from .event-name. Added .collapsed state for day-cells to shrink empty weeks. Added .cell-footer to position the add button at the bottom. */
+/* Version: V1.6 */
+/* Changes: Re-architected calendar layout to use week-level CSS Grids to allow event cards to natively span multiple columns. Replaced .day-cell flex layout with .week-container grids. Added .spanning-event and .day-segment classes to handle multi-day merged blocks. Styled right-border and internal vertical dividers for multi-day events. Removed font-weight bold from event-name. */
 :root {
     --bg-color: #121212;
     --surface-color: #1E1E2F;
@@ -76,7 +75,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 .upload-module:hover { border-color: var(--accent-color); background-color: var(--card-color); }
 .upload-module.dragover { border-color: var(--accent-hover); box-shadow: 0 0 10px rgba(123, 97, 255, 0.3); }
 
-/* Calendar Grid */
+/* Calendar Wrapper & Grid Layout */
 .calendar-wrapper { width: 100%; display: flex; flex-direction: column; gap: 5px; }
 
 .grid-headers { 
@@ -88,34 +87,83 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 
 .day-label { text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; padding: 5px 0; }
 
-.calendar-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.calendar-grid { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 10px; 
+}
 
-.day-cell { background-color: var(--surface-color); border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border-color); min-height: 120px; }
-.day-cell.weekend { background-color: var(--weekend-bg); }
-.day-cell.dimmed-empty { opacity: 0.5; }
-.day-cell.collapsed { min-height: auto; }
+/* Week Level Grid */
+.week-container {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    grid-auto-rows: min-content;
+    gap: 5px;
+    position: relative;
+}
 
-.cell-header { padding: 6px 8px; font-size: 0.8rem; font-weight: bold; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
+/* Day Column Backgrounds */
+.day-bg {
+    background-color: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    z-index: 0;
+}
+.day-bg.weekend { background-color: var(--weekend-bg); }
+.day-bg.dimmed-empty { opacity: 0.5; }
 
-.header-left-col { display: flex; align-items: center; gap: 8px; }
+/* Cell Headers and Footers */
+.cell-header {
+    z-index: 1;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.header-left-col { font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+
+.cell-footer {
+    z-index: 1;
+    padding: 4px 8px 8px 8px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
 
 .add-btn { background: none; border: none; color: var(--accent-color); font-size: 1.2rem; cursor: pointer; line-height: 1; transition: color 0.2s; }
 .add-btn:hover { color: var(--accent-hover); }
 
-.cell-events { padding: 5px; flex-grow: 1; display: flex; flex-direction: column; gap: 5px; }
+/* Event Cards & Segments */
+.event-card { 
+    background-color: var(--card-color); 
+    border-radius: 4px; 
+    border-left: 3px solid var(--accent-color);
+    border-right: 3px solid transparent; 
+    transition: transform 0.1s, box-shadow 0.1s; 
+    position: relative; 
+}
+.event-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10; }
 
-/* Cell Footer for Add Button */
-.cell-footer { display: flex; justify-content: flex-end; padding: 4px 8px; margin-top: auto; }
+.spanning-event {
+    z-index: 2;
+    padding: 0; /* Let segments handle padding */
+    overflow: hidden;
+}
 
-/* Event Cards */
-.event-card { background-color: var(--card-color); padding: 8px; border-radius: 4px; border-left: 3px solid var(--accent-color); cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; position: relative; }
-.event-card:hover { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-.event-card.has-notes { border-left-color: #FCA311; } 
+.day-segment {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    cursor: pointer;
+    position: relative;
+    transition: background-color 0.1s;
+}
+.day-segment:hover { background-color: rgba(255, 255, 255, 0.05); }
 
-/* Removed bold font-weight */
 .event-name { font-size: 0.8rem; font-weight: normal; margin-bottom: 6px; white-space: normal; word-wrap: break-word; line-height: 1.3; padding-right: 15px;}
-
-/* Note Icon Indicator */
 .note-icon { position: absolute; top: 6px; right: 6px; color: #FCA311; font-size: 0.9rem; }
 
 /* Circular Stats */
@@ -140,22 +188,10 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     font-size: 0.7rem;
 }
 
-.accepted-circle {
-    border-color: var(--accepted-color);
-    color: var(--accepted-color);
-}
+.accepted-circle { border-color: var(--accepted-color); color: var(--accepted-color); }
+.invited-circle { border-color: var(--invited-color); color: var(--invited-color); }
 
-.invited-circle {
-    border-color: var(--invited-color);
-    color: var(--invited-color);
-}
-
-.stat-divider {
-    color: var(--text-secondary);
-    font-weight: normal;
-    font-size: 0.8rem;
-    margin: 0 2px;
-}
+.stat-divider { color: var(--text-secondary); font-weight: normal; font-size: 0.8rem; margin: 0 2px; }
 
 /* Modals */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; }
