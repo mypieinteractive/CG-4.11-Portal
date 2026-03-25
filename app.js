@@ -1,28 +1,116 @@
-// Version: V1.0
-// Changes: Initial release of the Dashboard application incorporating SheetJS for XLSX parsing, state management for current week rendering, and data extraction from columns D, E, G, H.
+// Version: V1.1
+// Changes: Implemented GET and POST fetch requests to the Google Apps Script Web App for persistent data storage based on URL parameter. Altered grid generation to process a 42-day (6-week) array. Implemented automatic start-date calculation to display the week of the earliest chronological event upon loading.
+
+// Config
+const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
 
 // DOM Elements
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
-const dropText = document.getElementById('drop-text');
+const statusIndicator = document.getElementById('status-indicator');
+const projectTitle = document.getElementById('project-title');
 const calendarGrid = document.getElementById('calendar-grid');
-const currentWeekLabel = document.getElementById('current-week-label');
-const prevWeekBtn = document.getElementById('prev-week');
-const nextWeekBtn = document.getElementById('next-week');
+const currentPeriodLabel = document.getElementById('current-period-label');
+const prevPeriodBtn = document.getElementById('prev-period');
+const nextPeriodBtn = document.getElementById('next-period');
 
 // State
 let eventsData = [];
-let currentDate = new Date(); // Defaults to today
+let currentDate = new Date();
+let projectNumber = null;
 
 // Initialize
 function init() {
     setupEventListeners();
-    renderCalendar();
+    extractProjectNumber();
+
+    if (projectNumber) {
+        projectTitle.innerText = `Project: ${projectNumber}`;
+        fetchDatabaseData();
+    } else {
+        projectTitle.innerText = `No Project Selected`;
+        setStatus('Add ?project=XYZ to the URL.', 'error');
+        renderCalendar();
+    }
+}
+
+// Extract URL Parameter
+function extractProjectNumber() {
+    const params = new URLSearchParams(window.location.search);
+    projectNumber = params.get('project');
+}
+
+function setStatus(msg, type = '') {
+    statusIndicator.innerText = msg;
+    statusIndicator.className = `status ${type}`;
+}
+
+// Database Communication (GET)
+async function fetchDatabaseData() {
+    setStatus('Loading data from database...');
+    try {
+        const response = await fetch(`${API_URL}?project=${projectNumber}`);
+        const result = await response.json();
+        
+        if (result.status === 'success' && result.data && result.data.length > 0) {
+            eventsData = result.data;
+            setStatus('Data loaded successfully.', 'success');
+            setEarliestDate();
+        } else {
+            setStatus('No data found for this project. Upload a file.', '');
+        }
+        renderCalendar();
+    } catch (error) {
+        console.error('Fetch Error:', error);
+        setStatus('Error loading database.', 'error');
+        renderCalendar();
+    }
+}
+
+// Database Communication (POST)
+async function saveToDatabase() {
+    if (!projectNumber) return;
+    setStatus('Saving to database...');
+    try {
+        // Send as text/plain to bypass Google Apps Script strict CORS preflight handling
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify({
+                projectNumber: projectNumber,
+                eventsData: eventsData
+            })
+        });
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+            setStatus('Data saved and synced globally.', 'success');
+        } else {
+            setStatus(`Save Error: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Save Error:', error);
+        setStatus('Failed to save to database.', 'error');
+    }
+}
+
+// Set view to the earliest event
+function setEarliestDate() {
+    if (eventsData.length === 0) return;
+    
+    // Parse dates safely to avoid timezone day-shifting
+    const earliest = eventsData.reduce((min, ev) => {
+        const evDate = new Date(ev.date + 'T00:00:00');
+        return evDate < min ? evDate : min;
+    }, new Date(eventsData[0].date + 'T00:00:00'));
+    
+    currentDate = earliest;
 }
 
 // Event Listeners
 function setupEventListeners() {
-    // Dropzone events
     dropzone.addEventListener('click', () => fileInput.click());
     dropzone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -32,56 +120,53 @@ function setupEventListeners() {
     dropzone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropzone.classList.remove('dragover');
-        if (e.dataTransfer.files.length) {
-            handleFile(e.dataTransfer.files[0]);
-        }
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
     });
     fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length) {
-            handleFile(e.target.files[0]);
-        }
+        if (e.target.files.length) handleFile(e.target.files[0]);
     });
 
-    // Navigation events
-    prevWeekBtn.addEventListener('click', () => {
-        currentDate.setDate(currentDate.getDate() - 7);
+    // Navigation jumps by 42 days (6 weeks)
+    prevPeriodBtn.addEventListener('click', () => {
+        currentDate.setDate(currentDate.getDate() - 42);
         renderCalendar();
     });
-    nextWeekBtn.addEventListener('click', () => {
-        currentDate.setDate(currentDate.getDate() + 7);
+    nextPeriodBtn.addEventListener('click', () => {
+        currentDate.setDate(currentDate.getDate() + 42);
         renderCalendar();
     });
 }
 
 // File Processing
 function handleFile(file) {
+    if (!projectNumber) {
+        alert("Please add a project number to the URL (e.g., ?project=123) before uploading.");
+        return;
+    }
+
+    setStatus('Parsing file...');
     const reader = new FileReader();
     reader.onload = (e) => {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Parse raw arrays
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         processData(json);
         
-        // UI updates after successful upload
-        dropText.innerText = `Loaded: ${file.name} (Click to replace)`;
-        dropzone.classList.add('collapsed');
+        // After processing, automatically jump to earliest date, render, and save
+        setEarliestDate();
+        renderCalendar();
+        saveToDatabase();
     };
     reader.readAsArrayBuffer(file);
 }
 
 function processData(data) {
     eventsData = [];
-    
-    // Skip header row (index 0)
     for (let i = 1; i < data.length; i++) {
         const row = data[i];
         if (!row || row.length === 0) continue;
 
-        // Based on provided spec: D=3, E=4, G=6, H=7
         const eventName = row[3];
         let dateVal = row[4];
         const invited = parseInt(row[6]) || 0;
@@ -90,15 +175,11 @@ function processData(data) {
         if (!eventName || !dateVal) continue;
 
         let dateStr = "";
-        
-        // Handle Excel numeric date serialization
         if (typeof dateVal === 'number') {
             const dateObj = new Date((dateVal - (25569 + 1)) * 86400 * 1000); 
             dateStr = formatDateObj(dateObj);
         } else {
-            // Handle String format YYYY-MM-DD
-            const parts = dateVal.toString().split(' ')[0];
-            dateStr = parts;
+            dateStr = dateVal.toString().split(' ')[0];
         }
 
         eventsData.push({
@@ -108,7 +189,6 @@ function processData(data) {
             accepted: accepted
         });
     }
-    renderCalendar();
 }
 
 // Utility formatting
@@ -119,33 +199,34 @@ function formatDateObj(date) {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-// Calendar Logic
 function getStartOfWeek(date) {
     const d = new Date(date);
     const day = d.getDay(); 
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
     return new Date(d.setDate(diff));
 }
 
+// 6-Week Calendar Logic
 function renderCalendar() {
     calendarGrid.innerHTML = '';
-    const startOfWeek = getStartOfWeek(currentDate);
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    const startOfFirstWeek = getStartOfWeek(currentDate);
+    
+    // Calculate end of the 6-week period (42 days later minus 1)
+    const endOfPeriod = new Date(startOfFirstWeek);
+    endOfPeriod.setDate(startOfFirstWeek.getDate() + 41); 
 
-    // Update label
-    const options = { month: 'short', day: 'numeric' };
-    currentWeekLabel.innerText = `${startOfWeek.toLocaleDateString('en-US', options)} - ${endOfWeek.toLocaleDateString('en-US', options)}`;
+    const options = { month: 'short', day: 'numeric', year: 'numeric' };
+    currentPeriodLabel.innerText = `${startOfFirstWeek.toLocaleDateString('en-US', options)} - ${endOfPeriod.toLocaleDateString('en-US', options)}`;
 
-    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-    // Render 7 columns
-    for (let i = 0; i < 7; i++) {
-        const colDate = new Date(startOfWeek);
-        colDate.setDate(startOfWeek.getDate() + i);
+    // Render 42 Cells (6 weeks x 7 days)
+    for (let i = 0; i < 42; i++) {
+        const colDate = new Date(startOfFirstWeek);
+        colDate.setDate(startOfFirstWeek.getDate() + i);
         const dateString = formatDateObj(colDate);
+        
+        // Determine if weekend for styling
+        const isWeekend = colDate.getDay() === 0 || colDate.getDay() === 6;
 
-        // Filter events for this day
         const dayEvents = eventsData.filter(event => event.date === dateString);
 
         let totalInvited = 0;
@@ -157,34 +238,34 @@ function renderCalendar() {
             totalAccepted += ev.accepted;
             
             eventsHtml += `
-                <div class="event-card">
+                <div class="event-card" title="${ev.name}">
                     <div class="event-name">${ev.name}</div>
                     <div class="event-stats">
-                        <span class="stat-invited">Inv: ${ev.invited}</span>
-                        <span class="stat-accepted">Acc: ${ev.accepted}</span>
+                        <span class="stat-invited">Invited: ${ev.invited}</span>
+                        <span class="stat-accepted">Accepted: ${ev.accepted}</span>
                     </div>
                 </div>
             `;
         });
 
-        // Construct Column
-        const colDiv = document.createElement('div');
-        colDiv.className = 'day-column';
-        colDiv.innerHTML = `
-            <div class="day-header">
-                <div class="day-name">${daysOfWeek[i]}</div>
-                <div class="day-date">${colDate.getDate()}</div>
-            </div>
-            <div class="events-container">
+        const cellDiv = document.createElement('div');
+        cellDiv.className = `day-cell ${isWeekend ? 'weekend' : ''}`;
+        
+        // Show month/day for the cell header
+        const cellDateLabel = `${colDate.getMonth() + 1}/${colDate.getDate()}`;
+        
+        cellDiv.innerHTML = `
+            <div class="cell-header">${cellDateLabel}</div>
+            <div class="cell-events">
                 ${eventsHtml}
             </div>
-            <div class="day-totals">
-                <span class="stat-invited">Tot: ${totalInvited}</span>
-                <span class="stat-accepted">Tot: ${totalAccepted}</span>
+            <div class="cell-totals">
+                <span class="stat-invited">I: ${totalInvited}</span>
+                <span class="stat-accepted">A: ${totalAccepted}</span>
             </div>
         `;
 
-        calendarGrid.appendChild(colDiv);
+        calendarGrid.appendChild(cellDiv);
     }
 }
 
