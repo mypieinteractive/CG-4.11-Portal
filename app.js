@@ -1,192 +1,124 @@
-// Version: V1.0
-// Changes: Initial release of the Dashboard application incorporating SheetJS for XLSX parsing, state management for current week rendering, and data extraction from columns D, E, G, H.
+// Version: V1.1
+// Changes: Initial creation of the Google Apps Script to serve as the database backend. Added a robust logExecution function that automatically creates a "Logs" tab to record all incoming requests, data writes, and errors for detailed troubleshooting.
 
-// DOM Elements
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('file-input');
-const dropText = document.getElementById('drop-text');
-const calendarGrid = document.getElementById('calendar-grid');
-const currentWeekLabel = document.getElementById('current-week-label');
-const prevWeekBtn = document.getElementById('prev-week');
-const nextWeekBtn = document.getElementById('next-week');
+function doPost(e) {
+  const logId = Utilities.getUuid().substring(0, 8);
+  logExecution(logId, 'POST Request Received', JSON.stringify(e));
 
-// State
-let eventsData = [];
-let currentDate = new Date(); // Defaults to today
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      throw new Error('No data received in the POST request.');
+    }
 
-// Initialize
-function init() {
-    setupEventListeners();
-    renderCalendar();
+    const payload = JSON.parse(e.postData.contents);
+    const projectNumber = payload.projectNumber;
+    const eventsData = payload.eventsData; 
+
+    if (!projectNumber) {
+      throw new Error('Missing projectNumber in payload.');
+    }
+
+    logExecution(logId, 'Data Parsed', `Project: ${projectNumber}, Event Count: ${eventsData.length}`);
+
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Data');
+    if (!sheet) {
+      throw new Error('Sheet named "Data" not found. Please ensure the tab is named exactly "Data".');
+    }
+
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    let rowFound = false;
+
+    // Search for the project number in Column A (Index 0)
+    for (let i = 0; i < values.length; i++) {
+      if (String(values[i][0]) === String(projectNumber)) {
+        // Update existing row, Column B (Index 1)
+        sheet.getRange(i + 1, 2).setValue(JSON.stringify(eventsData));
+        rowFound = true;
+        logExecution(logId, 'Success', `Updated existing project data at row ${i + 1}`);
+        break;
+      }
+    }
+
+    // If project not found, append a new row
+    if (!rowFound) {
+      sheet.appendRow([String(projectNumber), JSON.stringify(eventsData)]);
+      logExecution(logId, 'Success', 'Appended new project data to the bottom of the sheet.');
+    }
+
+    return createJsonResponse({ status: 'success', message: 'Data saved successfully.' });
+
+  } catch (error) {
+    logExecution(logId, 'ERROR', error.toString());
+    return createJsonResponse({ status: 'error', message: error.toString() });
+  }
 }
 
-// Event Listeners
-function setupEventListeners() {
-    // Dropzone events
-    dropzone.addEventListener('click', () => fileInput.click());
-    dropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropzone.classList.add('dragover');
-    });
-    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-    dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropzone.classList.remove('dragover');
-        if (e.dataTransfer.files.length) {
-            handleFile(e.dataTransfer.files[0]);
-        }
-    });
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length) {
-            handleFile(e.target.files[0]);
-        }
-    });
+function doGet(e) {
+  const logId = Utilities.getUuid().substring(0, 8);
+  logExecution(logId, 'GET Request Received', JSON.stringify(e));
 
-    // Navigation events
-    prevWeekBtn.addEventListener('click', () => {
-        currentDate.setDate(currentDate.getDate() - 7);
-        renderCalendar();
-    });
-    nextWeekBtn.addEventListener('click', () => {
-        currentDate.setDate(currentDate.getDate() + 7);
-        renderCalendar();
-    });
-}
-
-// File Processing
-function handleFile(file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Parse raw arrays
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        processData(json);
-        
-        // UI updates after successful upload
-        dropText.innerText = `Loaded: ${file.name} (Click to replace)`;
-        dropzone.classList.add('collapsed');
-    };
-    reader.readAsArrayBuffer(file);
-}
-
-function processData(data) {
-    eventsData = [];
+  try {
+    const projectNumber = e.parameter.project;
     
-    // Skip header row (index 0)
-    for (let i = 1; i < data.length; i++) {
-        const row = data[i];
-        if (!row || row.length === 0) continue;
+    if (!projectNumber) {
+      logExecution(logId, 'Warning', 'No project parameter provided in the URL. Returning empty data.');
+      return createJsonResponse({ status: 'success', data: [] }); 
+    }
 
-        // Based on provided spec: D=3, E=4, G=6, H=7
-        const eventName = row[3];
-        let dateVal = row[4];
-        const invited = parseInt(row[6]) || 0;
-        const accepted = parseInt(row[7]) || 0;
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Data');
+    if (!sheet) {
+      throw new Error('Sheet named "Data" not found.');
+    }
 
-        if (!eventName || !dateVal) continue;
+    const dataRange = sheet.getDataRange();
+    const values = dataRange.getValues();
+    let projectData = [];
 
-        let dateStr = "";
-        
-        // Handle Excel numeric date serialization
-        if (typeof dateVal === 'number') {
-            const dateObj = new Date((dateVal - (25569 + 1)) * 86400 * 1000); 
-            dateStr = formatDateObj(dateObj);
-        } else {
-            // Handle String format YYYY-MM-DD
-            const parts = dateVal.toString().split(' ')[0];
-            dateStr = parts;
+    // Search for the project number in Column A (Index 0)
+    for (let i = 0; i < values.length; i++) {
+      if (String(values[i][0]) === String(projectNumber)) {
+        const rawJson = values[i][1];
+        if (rawJson) {
+          projectData = JSON.parse(rawJson);
         }
-
-        eventsData.push({
-            name: eventName,
-            date: dateStr,
-            invited: invited,
-            accepted: accepted
-        });
+        logExecution(logId, 'Success', `Retrieved data for project ${projectNumber} at row ${i + 1}`);
+        break;
+      }
     }
-    renderCalendar();
-}
 
-// Utility formatting
-function formatDateObj(date) {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-}
-
-// Calendar Logic
-function getStartOfWeek(date) {
-    const d = new Date(date);
-    const day = d.getDay(); 
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start
-    return new Date(d.setDate(diff));
-}
-
-function renderCalendar() {
-    calendarGrid.innerHTML = '';
-    const startOfWeek = getStartOfWeek(currentDate);
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-
-    // Update label
-    const options = { month: 'short', day: 'numeric' };
-    currentWeekLabel.innerText = `${startOfWeek.toLocaleDateString('en-US', options)} - ${endOfWeek.toLocaleDateString('en-US', options)}`;
-
-    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-    // Render 7 columns
-    for (let i = 0; i < 7; i++) {
-        const colDate = new Date(startOfWeek);
-        colDate.setDate(startOfWeek.getDate() + i);
-        const dateString = formatDateObj(colDate);
-
-        // Filter events for this day
-        const dayEvents = eventsData.filter(event => event.date === dateString);
-
-        let totalInvited = 0;
-        let totalAccepted = 0;
-        let eventsHtml = '';
-
-        dayEvents.forEach(ev => {
-            totalInvited += ev.invited;
-            totalAccepted += ev.accepted;
-            
-            eventsHtml += `
-                <div class="event-card">
-                    <div class="event-name">${ev.name}</div>
-                    <div class="event-stats">
-                        <span class="stat-invited">Inv: ${ev.invited}</span>
-                        <span class="stat-accepted">Acc: ${ev.accepted}</span>
-                    </div>
-                </div>
-            `;
-        });
-
-        // Construct Column
-        const colDiv = document.createElement('div');
-        colDiv.className = 'day-column';
-        colDiv.innerHTML = `
-            <div class="day-header">
-                <div class="day-name">${daysOfWeek[i]}</div>
-                <div class="day-date">${colDate.getDate()}</div>
-            </div>
-            <div class="events-container">
-                ${eventsHtml}
-            </div>
-            <div class="day-totals">
-                <span class="stat-invited">Tot: ${totalInvited}</span>
-                <span class="stat-accepted">Tot: ${totalAccepted}</span>
-            </div>
-        `;
-
-        calendarGrid.appendChild(colDiv);
+    if (projectData.length === 0) {
+      logExecution(logId, 'Notice', `No existing data found for project ${projectNumber}. Returning empty array.`);
     }
+
+    return createJsonResponse({ status: 'success', data: projectData });
+
+  } catch (error) {
+    logExecution(logId, 'ERROR', error.toString());
+    return createJsonResponse({ status: 'error', message: error.toString() });
+  }
 }
 
-// Run init
-init();
+// Helper to format JSON responses with CORS headers
+function createJsonResponse(responseObject) {
+  return ContentService.createTextOutput(JSON.stringify(responseObject))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Helper to maintain a detailed execution log in the spreadsheet
+function logExecution(id, action, details) {
+  console.log(`[${id}] ${action}: ${details}`); // Logs to the Apps Script dashboard
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let logSheet = ss.getSheetByName('Logs');
+  
+  // Auto-create the Logs sheet if it does not exist
+  if (!logSheet) {
+    logSheet = ss.insertSheet('Logs');
+    logSheet.appendRow(['Timestamp', 'Execution ID', 'Action', 'Details']);
+    logSheet.getRange("A1:D1").setFontWeight("bold");
+    logSheet.setColumnWidth(4, 600);
+  }
+  
+  logSheet.appendRow([new Date(), id, action, details]);
+}
