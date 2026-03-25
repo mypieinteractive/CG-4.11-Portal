@@ -1,6 +1,5 @@
-// File: app.js
-// Version: V1.5
-// Changes: Rewrote the renderCalendar() loop to chunk by weeks. Implemented slot assignment to visually align multi-day events across adjacent cards. Added dynamic colorization for multi-day events. Moved the [+] add button to a new footer div.
+// Version: V1.6
+// Changes: Implemented native CSS Grid block spanning to handle multi-day events. Grouped contiguous events into spanning blocks with dynamic slots. Events are now sorted to naturally bubble single-day entries to the top. Applied dashed border separators and dual-edge coloring for multi-day sequences. 
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -127,12 +126,9 @@ function setupEventListeners() {
     });
 }
 
-// File Processing (UPSERT Logic)
+// File Processing
 function handleFile(file) {
-    if (!projectNumber) {
-        alert("Please add a project number to the URL.");
-        return;
-    }
+    if (!projectNumber) return alert("Please add a project number to the URL.");
 
     setStatus('Parsing file...');
     const reader = new FileReader();
@@ -142,7 +138,6 @@ function handleFile(file) {
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         processData(json);
-        
         renderCalendar();
         saveToDatabase();
     };
@@ -170,18 +165,13 @@ function processData(data) {
         }
 
         const existingIndex = eventsData.findIndex(ev => ev.name === eventName && ev.date === dateStr);
-        
         if (existingIndex > -1) {
             eventsData[existingIndex].invited = invited;
             eventsData[existingIndex].accepted = accepted;
         } else {
             eventsData.push({
-                id: generateId(),
-                name: eventName,
-                date: dateStr,
-                invited: invited,
-                accepted: accepted,
-                notes: ""
+                id: generateId(), name: eventName, date: dateStr,
+                invited: invited, accepted: accepted, notes: ""
             });
         }
     }
@@ -221,37 +211,27 @@ function closeModals() {
 function saveNewEvent() {
     const date = document.getElementById('add-date').value;
     const name = document.getElementById('add-name').value.trim();
-    const invited = parseInt(document.getElementById('add-invited').value) || 0;
-    const accepted = parseInt(document.getElementById('add-accepted').value) || 0;
-
     if (!name) return alert("Event Name is required.");
 
     eventsData.push({
-        id: generateId(),
-        name: name,
-        date: date,
-        invited: invited,
-        accepted: accepted,
+        id: generateId(), name: name, date: date,
+        invited: parseInt(document.getElementById('add-invited').value) || 0,
+        accepted: parseInt(document.getElementById('add-accepted').value) || 0,
         notes: ""
     });
 
-    closeModals();
-    renderCalendar();
-    saveToDatabase();
+    closeModals(); renderCalendar(); saveToDatabase();
 }
 
 function saveEditedEvent() {
-    const id = document.getElementById('edit-id').value;
-    const ev = eventsData.find(e => e.id === id);
+    const ev = eventsData.find(e => e.id === document.getElementById('edit-id').value);
     if (!ev) return;
 
     ev.invited = parseInt(document.getElementById('edit-invited').value) || 0;
     ev.accepted = parseInt(document.getElementById('edit-accepted').value) || 0;
     ev.notes = document.getElementById('edit-notes').value.trim();
 
-    closeModals();
-    renderCalendar();
-    saveToDatabase();
+    closeModals(); renderCalendar(); saveToDatabase();
 }
 
 // Utilities
@@ -262,26 +242,18 @@ function formatDateObj(date) {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-function generateId() {
-    return '_' + Math.random().toString(36).substr(2, 9);
-}
+function generateId() { return '_' + Math.random().toString(36).substr(2, 9); }
 
 function getStartOfWeek(date) {
     const d = new Date(date);
     const day = d.getDay(); 
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
-    return new Date(d.setDate(diff));
+    return new Date(d.setDate(d.getDate() - day + (day === 0 ? -6 : 1)));
 }
 
 // Render Logic
 function renderCalendar() {
     calendarGrid.innerHTML = '';
-    
-    if (eventsData.length === 0) {
-        projectDateRange.innerText = "No events scheduled.";
-        return;
-    }
-
+    if (eventsData.length === 0) { projectDateRange.innerText = "No events scheduled."; return; }
     eventsData.forEach(ev => { if(!ev.id) ev.id = generateId(); });
 
     let minDate = new Date(eventsData[0].date + 'T00:00:00');
@@ -293,22 +265,16 @@ function renderCalendar() {
         if (d > maxDate) maxDate = d;
     });
 
-    const options = { month: 'short', day: 'numeric', year: 'numeric' };
-    projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', options)} - ${maxDate.toLocaleDateString('en-US', options)}`;
+    projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
     const startOfGrid = getStartOfWeek(minDate);
     const endOfGridWeek = getStartOfWeek(maxDate);
     endOfGridWeek.setDate(endOfGridWeek.getDate() + 5); 
 
     let currentLoopDate = new Date(startOfGrid);
-    
-    // Palette for multi-day events
     const palette = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', '#6C5CE7', '#fd79a8', '#00b894', '#e17055'];
 
-    // Process week by week to align slots
     while (currentLoopDate <= endOfGridWeek) {
-        
-        // 1. Gather all dates for the current Mon-Sat week
         let weekDates = [];
         for(let i = 0; i < 6; i++) {
             let d = new Date(currentLoopDate);
@@ -316,124 +282,127 @@ function renderCalendar() {
             weekDates.push(formatDateObj(d));
         }
 
-        // 2. Extract this week's events
         let weekEvents = eventsData.filter(ev => weekDates.includes(ev.date));
-        let isWeekEmpty = weekEvents.length === 0;
-
-        // 3. Slot assignment logic for vertical alignment
-        let uniqueEventNames = [...new Set(weekEvents.map(e => e.name))];
+        let uniqueNames = [...new Set(weekEvents.map(e => e.name))];
         
-        uniqueEventNames.sort((a, b) => {
-            let aDate = weekEvents.find(e => e.name === a).date;
-            let bDate = weekEvents.find(e => e.name === b).date;
-            if (aDate === bDate) return a.localeCompare(b);
-            return aDate.localeCompare(bDate);
-        });
-
-        let eventStyling = {};
-        uniqueEventNames.forEach((name, index) => {
-            let occurrences = weekEvents.filter(e => e.name === name).length;
-            let color = palette[index % palette.length];
-            eventStyling[name] = {
-                slot: index,
-                isMulti: occurrences > 1,
-                color: color
-            };
-        });
-
-        let maxSlots = uniqueEventNames.length;
-
-        // 4. Render the 6 days
-        for(let i = 0; i < 6; i++) {
-            let d = new Date(currentLoopDate);
-            d.setDate(d.getDate() + i);
-            const dateString = formatDateObj(d);
-            const isMonday = d.getDay() === 1;
-            const isSaturday = d.getDay() === 6;
-
-            const dayEvents = weekEvents.filter(ev => ev.date === dateString);
-            const isEmpty = dayEvents.length === 0;
-
-            let totalInvited = 0;
-            let totalAccepted = 0;
-            let eventsHtml = '';
-
-            if (!isWeekEmpty) {
-                // Render assigned slots to maintain alignment across days
-                for (let s = 0; s < maxSlots; s++) {
-                    let ev = dayEvents.find(e => eventStyling[e.name].slot === s);
-                    
-                    if (ev) {
-                        totalInvited += ev.invited;
-                        totalAccepted += ev.accepted;
-                        const hasNotes = ev.notes && ev.notes.trim().length > 0;
-                        const style = eventStyling[ev.name];
-                        
-                        let cardStyle = '';
-                        if (style.isMulti) {
-                            // Assign border color and a 20% opacity background color (33 is hex for 20%)
-                            cardStyle = `style="border-left-color: ${style.color}; background-color: ${style.color}33;"`;
-                        }
-
-                        eventsHtml += `
-                            <div class="event-card ${hasNotes ? 'has-notes' : ''}" onclick="openEditModal('${ev.id}')" ${cardStyle}>
-                                ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
-                                <div class="event-name">${ev.name}</div>
-                                <div class="event-stats">
-                                    <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
-                                    <span class="stat-divider">/</span>
-                                    <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        // Invisible placeholder to keep the grid slots perfectly aligned
-                        eventsHtml += `
-                            <div class="event-card" style="visibility: hidden; pointer-events: none;">
-                                <div class="event-name">&nbsp;</div>
-                                <div class="event-stats"><span class="stat-divider">&nbsp;</span></div>
-                            </div>
-                        `;
+        // 1. Group contiguous days into Blocks
+        let eventBlocks = [];
+        uniqueNames.forEach(name => {
+            let startCol = -1;
+            let segments = [];
+            for (let i = 0; i < 6; i++) {
+                let ev = weekEvents.find(e => e.name === name && e.date === weekDates[i]);
+                if (ev) {
+                    if (startCol === -1) startCol = i;
+                    segments.push(ev);
+                } else {
+                    if (startCol !== -1) {
+                        eventBlocks.push({ name, startCol, span: segments.length, segments });
+                        startCol = -1;
+                        segments = [];
                     }
                 }
             }
+            if (startCol !== -1) eventBlocks.push({ name, startCol, span: segments.length, segments });
+        });
 
-            const cellDiv = document.createElement('div');
-            // Apply a 'collapsed' class if the entire week has 0 events
-            cellDiv.className = `day-cell ${isSaturday ? 'weekend' : ''} ${(isMonday && isEmpty) ? 'dimmed-empty' : ''} ${isWeekEmpty ? 'collapsed' : ''}`;
+        // 2. Sort to float shorter/earlier events up
+        eventBlocks.sort((a, b) => {
+            if (a.startCol !== b.startCol) return a.startCol - b.startCol;
+            return b.span - a.span; 
+        });
+
+        // 3. Assign row slots
+        let slotsOccupied = [];
+        eventBlocks.forEach(block => {
+            let row = 0;
+            while (true) {
+                if (!slotsOccupied[row]) slotsOccupied[row] = [];
+                let canFit = true;
+                for (let i = 0; i < block.span; i++) {
+                    if (slotsOccupied[row][block.startCol + i]) { canFit = false; break; }
+                }
+                if (canFit) {
+                    for (let i = 0; i < block.span; i++) { slotsOccupied[row][block.startCol + i] = true; }
+                    block.slot = row;
+                    break;
+                }
+                row++;
+            }
+        });
+        
+        let maxSlots = slotsOccupied.length;
+        let weekHtml = `<div class="week-container">`;
+
+        // 4. Render Day Backgrounds, Headers, and Footers
+        for (let i = 0; i < 6; i++) {
+            let dateStr = weekDates[i];
+            let d = new Date(currentLoopDate); d.setDate(d.getDate() + i);
+            let isDayEmpty = !weekEvents.some(e => e.date === dateStr);
+            let bgClasses = `day-bg ${i === 5 ? 'weekend' : ''} ${(i === 0 && isDayEmpty) ? 'dimmed-empty' : ''}`;
             
-            const cellDateLabel = `${d.getMonth() + 1}/${d.getDate()}`;
+            let dayTotals = weekEvents.filter(e => e.date === dateStr).reduce((acc, ev) => {
+                acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
+            }, { invited: 0, accepted: 0 });
+
+            // Span background entirely to bottom
+            weekHtml += `<div class="${bgClasses}" style="grid-column: ${i + 1}; grid-row: 1 / span ${maxSlots + 2};"></div>`;
             
-            const totalsHtml = isEmpty ? '' : `
-                <div class="header-totals">
-                    <span class="stat-circle accepted-circle" title="Total Accepted">${totalAccepted}</span>
-                    <span class="stat-divider">/</span>
-                    <span class="stat-circle invited-circle" title="Total Invited">${totalInvited}</span>
+            // Header
+            weekHtml += `
+                <div class="cell-header" style="grid-column: ${i + 1}; grid-row: 1;">
+                    <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
+                    ${isDayEmpty ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle">${dayTotals.accepted}</span><span class="stat-divider">/</span><span class="stat-circle invited-circle">${dayTotals.invited}</span></div>`}
                 </div>
             `;
-
-            cellDiv.innerHTML = `
-                <div class="cell-header">
-                    <div class="header-left-col">
-                        <span>${cellDateLabel}</span>
-                    </div>
-                    ${totalsHtml}
-                </div>
-                <div class="cell-events">
-                    ${eventsHtml}
-                </div>
-                <div class="cell-footer">
-                    <button class="add-btn" onclick="openAddModal('${dateString}')" title="Add Event">+</button>
+            
+            // Footer with Add Button (always at the very bottom row of the week)
+            weekHtml += `
+                <div class="cell-footer" style="grid-column: ${i + 1}; grid-row: ${maxSlots + 2};">
+                    <button class="add-btn" onclick="openAddModal('${dateStr}')" title="Add Event">+</button>
                 </div>
             `;
-
-            calendarGrid.appendChild(cellDiv);
         }
 
-        // Jump exactly 7 days to the next Monday chunk
+        // 5. Render Spanning Blocks over the Grid
+        eventBlocks.forEach(block => {
+            let colorIdx = uniqueNames.indexOf(block.name);
+            let styleColor = palette[colorIdx % palette.length];
+            let isMulti = block.span > 1;
+            
+            let cardStyle = `grid-column: ${block.startCol + 1} / span ${block.span}; grid-row: ${block.slot + 2}; border-left-color: ${styleColor};`;
+            if (isMulti) cardStyle += ` border-right-color: ${styleColor}; background-color: ${styleColor}1A;`;
+            
+            let segmentsHtml = block.segments.map((ev, idx) => {
+                const hasNotes = ev.notes && ev.notes.trim().length > 0;
+                let segmentStyle = (isMulti && idx < block.span - 1) ? `border-right: 1px dashed rgba(255,255,255,0.15);` : '';
+                
+                return `
+                    <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
+                        ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
+                        <div class="event-name" style="${idx === 0 ? '' : 'opacity: 0; pointer-events: none;'}">${ev.name}</div>
+                        <div class="event-stats">
+                            <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
+                            <span class="stat-divider">/</span>
+                            <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            weekHtml += `
+                <div class="event-card spanning-event ${isMulti ? 'multi-day' : ''}" style="${cardStyle}">
+                    <div style="display: grid; grid-template-columns: repeat(${block.span}, 1fr); gap: 5px; height: 100%;">
+                        ${segmentsHtml}
+                    </div>
+                </div>
+            `;
+        });
+
+        weekHtml += `</div>`;
+        calendarGrid.insertAdjacentHTML('beforeend', weekHtml);
         currentLoopDate.setDate(currentLoopDate.getDate() + 7);
     }
 }
 
-// Run init
 init();
