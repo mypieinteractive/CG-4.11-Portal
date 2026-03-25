@@ -10,27 +10,27 @@
 <body>
     <div class="dashboard-container">
         
-        <header class="header">
-            <div class="header-left">
-                <div class="title-group">
-                    <h1 id="project-date-range">Loading timeline...</h1>
+        <div class="sticky-top-section">
+            <header class="header">
+                <div class="header-left">
+                    <div class="title-group">
+                        <h1 id="project-date-range">Loading timeline...</h1>
+                    </div>
                 </div>
-            </div>
-            
-            <div class="header-right">
-                <div class="status-group">
-                    <div id="status-indicator" class="status">Waiting for data</div>
-                    <div id="last-updated" class="last-updated"></div>
+                
+                <div class="header-right">
+                    <div class="status-group">
+                        <div id="status-indicator" class="status">Waiting for data</div>
+                        <div id="last-updated" class="last-updated"></div>
+                    </div>
+                    <div class="upload-module" id="dropzone">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        <span>Drag & Drop XLSX</span>
+                        <input type="file" id="file-input" accept=".xlsx, .xls, .csv" hidden>
+                    </div>
                 </div>
-                <div class="upload-module" id="dropzone">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                    <span>Drag & Drop XLSX</span>
-                    <input type="file" id="file-input" accept=".xlsx, .xls, .csv" hidden>
-                </div>
-            </div>
-        </header>
+            </header>
 
-        <div class="calendar-wrapper">
             <div class="grid-headers">
                 <div class="day-label">Mon</div>
                 <div class="day-label">Tue</div>
@@ -39,8 +39,11 @@
                 <div class="day-label">Fri</div>
                 <div class="day-label weekend">Sat</div>
             </div>
+        </div>
+
+        <div class="calendar-wrapper">
             <div id="calendar-grid" class="calendar-grid">
-                </div>
+            </div>
         </div>
     </div>
 
