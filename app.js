@@ -1,5 +1,6 @@
-// Version: V1.7
-// Changes: Fixed the 2-day Excel parsing bug by removing the faulty leap-year assumption and adding a timezone offset modifier. Restored visibility to secondary day-segments so event titles show on every day of a block. Implemented chronological sorting on load/parse to handle unsorted Excel files.
+// File: app.js
+// Version: V1.8
+// Changes: Simplified Excel date parsing by utilizing SheetJS's native { cellDates: true } configuration. This forces Excel serial numbers into standard JS Date objects. Extracted the date using UTC methods to prevent local timezone offsets from shifting the date backwards.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -136,7 +137,10 @@ function handleFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // FIX: Added { cellDates: true } to force SheetJS to parse Excel serials natively into JS Date objects
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         processData(json);
@@ -159,13 +163,22 @@ function processData(data) {
         if (!eventName || !dateVal) continue;
 
         let dateStr = "";
-        if (typeof dateVal === 'number') {
-            // FIX: Correct offset without +1 (25569 to 1970). Add timezone offset to prevent localized 1-day shift backward.
-            const dateObj = new Date((dateVal - 25569) * 86400 * 1000); 
-            dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
-            dateStr = formatDateObj(dateObj);
+        
+        // FIX: Much simpler and more robust date extraction using native JS Date objects outputted by SheetJS
+        if (dateVal instanceof Date) {
+            // SheetJS creates the Date object in UTC. We use getUTC methods to avoid local timezone shifts entirely.
+            const yyyy = dateVal.getUTCFullYear();
+            const mm = String(dateVal.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(dateVal.getUTCDate()).padStart(2, '0');
+            dateStr = `${yyyy}-${mm}-${dd}`;
         } else {
-            dateStr = dateVal.toString().split(' ')[0];
+            // Fallback just in case the cell was formatted as plain text
+            const d = new Date(dateVal);
+            if (!isNaN(d)) {
+                dateStr = formatDateObj(d);
+            } else {
+                continue; // Skip if date is completely unparseable
+            }
         }
 
         const existingIndex = eventsData.findIndex(ev => ev.name === eventName && ev.date === dateStr);
@@ -381,7 +394,6 @@ function renderCalendar() {
                 const hasNotes = ev.notes && ev.notes.trim().length > 0;
                 let segmentStyle = (isMulti && idx < block.span - 1) ? `border-right: 1px dashed rgba(255,255,255,0.15);` : '';
                 
-                // REMOVED opacity mapping to make event name uniformly visible across days
                 return `
                     <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
                         ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
