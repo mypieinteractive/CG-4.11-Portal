@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.8
-// Changes: Simplified Excel date parsing by utilizing SheetJS's native { cellDates: true } configuration. This forces Excel serial numbers into standard JS Date objects. Extracted the date using UTC methods to prevent local timezone offsets from shifting the date backwards.
+// Version: V1.9
+// Changes: Completely rewrote the Excel date parsing logic to fix the 2-day offset bug. Removed the +1 offset from the epoch calculation and implemented getUTCFullYear, getUTCMonth, and getUTCDate to prevent local timezone offsets from shifting UTC midnights into the previous day.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -137,10 +137,7 @@ function handleFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
         const data = new Uint8Array(e.target.result);
-        
-        // FIX: Added { cellDates: true } to force SheetJS to parse Excel serials natively into JS Date objects
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-        
+        const workbook = XLSX.read(data, { type: 'array' });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         processData(json);
@@ -164,20 +161,29 @@ function processData(data) {
 
         let dateStr = "";
         
-        // FIX: Much simpler and more robust date extraction using native JS Date objects outputted by SheetJS
-        if (dateVal instanceof Date) {
-            // SheetJS creates the Date object in UTC. We use getUTC methods to avoid local timezone shifts entirely.
-            const yyyy = dateVal.getUTCFullYear();
-            const mm = String(dateVal.getUTCMonth() + 1).padStart(2, '0');
-            const dd = String(dateVal.getUTCDate()).padStart(2, '0');
+        if (typeof dateVal === 'number') {
+            // JS epoch is Jan 1 1970. Excel epoch is conceptually Jan 1 1900.
+            // The exact difference (including Excel's 1900 leap year bug) is exactly 25569 days.
+            // Math.round fixes any floating-point imperfecions.
+            const jsDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+            
+            // CRITICAL: We MUST use getUTC methods to extract the string. 
+            // If we use local methods, timezones behind UTC (like MDT/MST) will shift 
+            // the midnight UTC timestamp backward into the previous day.
+            const yyyy = jsDate.getUTCFullYear();
+            const mm = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(jsDate.getUTCDate()).padStart(2, '0');
             dateStr = `${yyyy}-${mm}-${dd}`;
         } else {
-            // Fallback just in case the cell was formatted as plain text
+            // Fallback just in case the cell was explicitly formatted as plain text
             const d = new Date(dateVal);
             if (!isNaN(d)) {
-                dateStr = formatDateObj(d);
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                dateStr = `${yyyy}-${mm}-${dd}`;
             } else {
-                continue; // Skip if date is completely unparseable
+                continue; 
             }
         }
 
