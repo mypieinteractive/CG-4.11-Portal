@@ -1,5 +1,5 @@
-/* Version: V1.2 */
-/* Changes: Restyled header to fit all elements left/right, updated CSS grid to 6 columns, added semi-transparent Monday class, allowed event names to wrap, and aligned cell headers/stats left/right. */
+/* Version: V1.3 */
+/* Changes: Added position: sticky to header. Redesigned upload module. Added modal styling. Configured event stats to sit side-by-side. Added dynamic dimming class. */
 :root {
     --bg-color: #121212;
     --surface-color: #1E1E2F;
@@ -14,207 +14,127 @@
     --weekend-bg: #1A1A27;
 }
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 
-body {
-    background-color: var(--bg-color);
-    color: var(--text-primary);
-    padding: 10px;
-    font-size: 14px; 
-}
+body { background-color: var(--bg-color); color: var(--text-primary); padding: 0 10px 10px 10px; font-size: 14px; }
 
-.dashboard-container {
-    width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
+.dashboard-container { width: 100%; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px; }
 
-/* Consolidated Header */
+/* Sticky Header */
 .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: var(--surface-color);
-    padding: 12px 20px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    flex-wrap: wrap; /* Allows stacking on very small screens */
+    background-color: var(--bg-color); /* Match body to blend edge */
+    padding: 15px 0 10px 0;
+    flex-wrap: wrap;
     gap: 15px;
+    border-bottom: 1px solid var(--border-color);
 }
 
-.header-left {
-    display: flex;
-    align-items: center;
-}
+.header-left { display: flex; align-items: center; }
 
-.title-group h1 {
-    font-size: 1.2rem;
-    margin-bottom: 4px;
-}
+.title-group h1 { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); }
 
-.title-group h2 {
-    font-size: 0.95rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
+.header-right { display: flex; align-items: center; gap: 15px; }
 
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
+.status-group { text-align: right; display: flex; flex-direction: column; justify-content: center; }
 
-.status-group {
-    text-align: right;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.status {
-    font-size: 0.85rem;
-    font-weight: bold;
-}
-
+.status { font-size: 0.85rem; font-weight: bold; }
 .status.success { color: var(--accepted-color); }
 .status.error { color: #EF476F; }
 
-.last-updated {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    margin-top: 2px;
-}
+.last-updated { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
 
+/* Drag and Drop Module */
 .upload-module {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
-    background-color: var(--accent-color);
-    color: white;
-    padding: 10px 16px;
-    border-radius: 6px;
+    justify-content: center;
+    gap: 4px;
+    background-color: var(--surface-color);
+    color: var(--text-primary);
+    padding: 10px 20px;
+    border-radius: 8px;
     cursor: pointer;
-    font-weight: bold;
-    font-size: 0.9rem;
-    transition: background 0.2s, box-shadow 0.2s;
-    border: 2px dashed transparent;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    border: 2px dashed var(--border-color);
+    min-width: 150px;
 }
 
-.upload-module:hover {
-    background-color: var(--accent-hover);
-}
-
-.upload-module.dragover {
-    border-color: white;
-    box-shadow: 0 0 10px var(--accent-hover);
-}
+.upload-module:hover { border-color: var(--accent-color); background-color: var(--card-color); }
+.upload-module.dragover { border-color: var(--accent-hover); box-shadow: 0 0 10px rgba(123, 97, 255, 0.3); }
 
 /* Calendar Grid */
-.calendar-wrapper {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
+.calendar-wrapper { width: 100%; display: flex; flex-direction: column; gap: 5px; }
 
-.grid-headers {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr); /* 6 Columns now */
-    gap: 5px;
-}
+.grid-headers { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; position: sticky; top: 75px; z-index: 90; background: var(--bg-color); padding-bottom: 5px;}
 
-.day-label {
-    text-align: center;
-    font-size: 0.85rem;
-    font-weight: bold;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    padding: 5px 0;
-}
+.day-label { text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; padding: 5px 0; }
 
-.calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr); /* 6 Columns now */
-    gap: 5px;
-}
+.calendar-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
 
-.day-cell {
-    background-color: var(--surface-color);
-    border-radius: 6px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border: 1px solid var(--border-color);
-    min-height: 120px;
-}
-
+.day-cell { background-color: var(--surface-color); border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border-color); min-height: 120px; }
 .day-cell.weekend { background-color: var(--weekend-bg); }
-.day-cell.monday { opacity: 0.6; } /* Monday transparency */
+.day-cell.dimmed-empty { opacity: 0.5; } /* Only dims if empty (e.g., Monday without events) */
 
-.cell-header {
-    padding: 6px 8px;
-    font-size: 0.8rem;
-    font-weight: bold;
-    border-bottom: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    display: flex;
-    justify-content: space-between; /* Date left, Totals right */
-    align-items: center;
-}
+.cell-header { padding: 6px 8px; font-size: 0.8rem; font-weight: bold; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
 
-.header-totals {
-    display: flex;
-    gap: 8px;
-}
+.header-left-col { display: flex; align-items: center; gap: 8px; }
 
-.cell-events {
-    padding: 5px;
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
+.add-btn { background: none; border: none; color: var(--accent-color); font-size: 1.2rem; cursor: pointer; line-height: 1; transition: color 0.2s; }
+.add-btn:hover { color: var(--accent-hover); }
+
+.header-totals { display: flex; gap: 8px; }
+
+.cell-events { padding: 5px; flex-grow: 1; display: flex; flex-direction: column; gap: 5px; }
 
 /* Event Cards */
-.event-card {
-    background-color: var(--card-color);
-    padding: 8px;
-    border-radius: 4px;
-    border-left: 3px solid var(--accent-color);
-}
+.event-card { background-color: var(--card-color); padding: 8px; border-radius: 4px; border-left: 3px solid var(--accent-color); cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; position: relative; }
+.event-card:hover { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+.event-card.has-notes { border-left-color: #FCA311; } /* Visual indicator for notes */
 
-.event-name {
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin-bottom: 6px;
-    white-space: normal; /* Allow wrapping */
-    word-wrap: break-word;
-    line-height: 1.3;
-}
+.event-name { font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; white-space: normal; word-wrap: break-word; line-height: 1.3; padding-right: 15px;}
 
-.event-stats {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end; /* Right justify text */
-    text-align: right;
-    font-size: 0.75rem;
-    line-height: 1.3;
-}
+/* Note Icon Indicator */
+.note-icon { position: absolute; top: 6px; right: 6px; color: #FCA311; font-size: 0.9rem; }
 
-.stat-invited { color: var(--invited-color); font-weight: 500;}
-.stat-accepted { color: var(--accepted-color); font-weight: 500;}
+.event-stats { display: flex; flex-direction: row; justify-content: flex-end; gap: 10px; font-size: 0.75rem; font-weight: 500;}
+.stat-invited { color: var(--invited-color); }
+.stat-accepted { color: var(--accepted-color); }
+
+/* Modals */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+.modal-overlay.hidden { display: none; }
+
+.modal { background: var(--surface-color); width: 90%; max-width: 400px; border-radius: 10px; border: 1px solid var(--border-color); overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.modal.hidden { display: none; }
+
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color); }
+.modal-header h2 { font-size: 1.1rem; }
+.close-btn { background: none; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; }
+.close-btn:hover { color: white; }
+
+.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+
+.form-row { display: flex; gap: 15px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.form-group label { font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; }
+.form-group input, .form-group textarea { width: 100%; background: var(--bg-color); border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
+.form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--accent-color); }
+.form-group textarea { resize: vertical; }
+
+.save-btn { background: var(--accent-color); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-top: 5px;}
+.save-btn:hover { background: var(--accent-hover); }
 
 @media (max-width: 768px) {
     .header { flex-direction: column; align-items: stretch; text-align: center; }
     .header-left, .header-right { flex-direction: column; justify-content: center; }
     .status-group { text-align: center; }
-    .cell-header { flex-direction: column; gap: 4px; }
 }
