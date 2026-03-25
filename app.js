@@ -1,5 +1,6 @@
-// Version: V1.3
-// Changes: Implemented interactive modals for adding events and editing numbers/notes. Rewrote file processing to 'upsert' data (updating matches while preserving manual entries and notes). Adjusted rendering logic to hide empty headers and dynamically dim Mondays only if empty. Reoriented stats side-by-side.
+// File: app.js
+// Version: V1.4
+// Changes: Added totalEvents to the JSON payload in saveToDatabase(). Updated renderCalendar() to output the new circular HTML structure for accepted/invited stats.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -88,6 +89,7 @@ async function saveToDatabase() {
     
     const payload = {
         lastUpdated: lastUpdatedDate,
+        totalEvents: eventsData.length,
         eventsData: eventsData
     };
 
@@ -167,15 +169,12 @@ function processData(data) {
             dateStr = dateVal.toString().split(' ')[0];
         }
 
-        // Upsert logic: Check if event already exists on this date
         const existingIndex = eventsData.findIndex(ev => ev.name === eventName && ev.date === dateStr);
         
         if (existingIndex > -1) {
-            // Update numbers, preserve notes and other properties
             eventsData[existingIndex].invited = invited;
             eventsData[existingIndex].accepted = accepted;
         } else {
-            // Insert new
             eventsData.push({
                 id: generateId(),
                 name: eventName,
@@ -283,7 +282,6 @@ function renderCalendar() {
         return;
     }
 
-    // Ensure all existing events have IDs for editing
     eventsData.forEach(ev => { if(!ev.id) ev.id = generateId(); });
 
     let minDate = new Date(eventsData[0].date + 'T00:00:00');
@@ -331,24 +329,24 @@ function renderCalendar() {
                     ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
                     <div class="event-name">${ev.name}</div>
                     <div class="event-stats">
-                        <span class="stat-invited">I: ${ev.invited}</span>
-                        <span class="stat-accepted">A: ${ev.accepted}</span>
+                        <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
+                        <span class="stat-divider">/</span>
+                        <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
                     </div>
                 </div>
             `;
         });
 
         const cellDiv = document.createElement('div');
-        // Apply dimmed class only if it's Monday AND has no events
         cellDiv.className = `day-cell ${isSaturday ? 'weekend' : ''} ${(isMonday && isEmpty) ? 'dimmed-empty' : ''}`;
         
         const cellDateLabel = `${currentLoopDate.getMonth() + 1}/${currentLoopDate.getDate()}`;
         
-        // Hide header totals if day is empty
         const totalsHtml = isEmpty ? '' : `
             <div class="header-totals">
-                <span class="stat-invited">I: ${totalInvited}</span>
-                <span class="stat-accepted">A: ${totalAccepted}</span>
+                <span class="stat-circle accepted-circle" title="Total Accepted">${totalAccepted}</span>
+                <span class="stat-divider">/</span>
+                <span class="stat-circle invited-circle" title="Total Invited">${totalInvited}</span>
             </div>
         `;
 
