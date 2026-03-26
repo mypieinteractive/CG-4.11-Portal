@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.15
-// Changes: Hooked up the #collapse-btn event listener to toggle the .collapsed-view class on the calendarGrid and dynamically swap the inline SVG and button text between Collapse/Expand modes.
+// Version: V1.16
+// Changes: Added logic for "Global" URL parameter (bypasses saving/uploading). Integrated the new Event Type fields into the modals and data structure. Handled the show/hide behavior of the stats inputs based on type. Implemented the header Type Filter. Modified the card renderer to output emojis for Delivery, Inspection, and Other types.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -23,6 +23,8 @@ let eventsData = [];
 let lastUpdatedDate = "";
 let projectNumber = null;
 let editRelatedEvents = [];
+let isGlobalView = false;
+let currentFilter = "All";
 
 // Initialize
 function init() {
@@ -30,6 +32,10 @@ function init() {
     extractProjectNumber();
 
     if (projectNumber) {
+        if (projectNumber.toLowerCase() === 'global') {
+            isGlobalView = true;
+            document.querySelector('.range-label').style.display = 'none';
+        }
         fetchDatabaseData();
     } else {
         projectDateRange.innerText = `No Project Selected`;
@@ -84,6 +90,8 @@ async function fetchDatabaseData() {
 
 async function saveToDatabase() {
     if (!projectNumber) return;
+    if (isGlobalView) return alert("Cannot save changes while in Global 'All Projects' view.");
+    
     setStatus('Saving to database...');
     
     const now = new Date();
@@ -128,7 +136,6 @@ function setupEventListeners() {
         if (e.target.files.length) handleFile(e.target.files[0]);
     });
 
-    // Collapse Events Toggle Logic
     const collapseBtn = document.getElementById('collapse-btn');
     if (collapseBtn) {
         collapseBtn.addEventListener('click', function() {
@@ -142,7 +149,21 @@ function setupEventListeners() {
         });
     }
 
-    // Modal Realtime Date Range Updaters
+    const typeFilter = document.getElementById('event-type-filter');
+    if (typeFilter) {
+        typeFilter.addEventListener('change', function() {
+            currentFilter = this.value;
+            renderCalendar();
+        });
+    }
+
+    document.getElementById('add-type').addEventListener('change', function() {
+        document.getElementById('add-stats-wrapper').style.display = (this.value === 'Work Event' ? 'flex' : 'none');
+    });
+    document.getElementById('edit-type').addEventListener('change', function() {
+        document.getElementById('edit-stats-wrapper').style.display = (this.value === 'Work Event' ? 'block' : 'none');
+    });
+
     document.getElementById('edit-start-date').addEventListener('change', function() {
         updateRelatedEventsFromDOM();
         renderEditStats(this.value, document.getElementById('edit-end-date').value);
@@ -156,6 +177,7 @@ function setupEventListeners() {
 // File Processing
 function handleFile(file) {
     if (!projectNumber) return alert("Please add a project number to the URL.");
+    if (isGlobalView) return alert("Cannot upload files while in Global view. Please switch to a specific project.");
 
     setStatus('Parsing file...');
     const reader = new FileReader();
@@ -203,10 +225,12 @@ function processData(data) {
         if (existingIndex > -1) {
             eventsData[existingIndex].invited = invited;
             eventsData[existingIndex].accepted = accepted;
+            if (!eventsData[existingIndex].type) eventsData[existingIndex].type = 'Work Event';
         } else {
             eventsData.push({
                 id: generateId(), name: eventName, date: dateStr,
-                invited: invited, accepted: accepted, notes: ""
+                invited: invited, accepted: accepted, notes: "",
+                type: 'Work Event' // Excel Default
             });
         }
     }
@@ -216,7 +240,10 @@ function processData(data) {
 // ADD Modal Logic
 function openAddModal() {
     if (!projectNumber) return alert("Please add a ?project=XYZ variable to your URL to begin working.");
+    if (isGlobalView) return alert("Cannot add events while in Global 'All Projects' view.");
 
+    document.getElementById('add-type').value = 'Work Event';
+    document.getElementById('add-stats-wrapper').style.display = 'flex';
     document.getElementById('add-start-date').value = '';
     document.getElementById('add-end-date').value = '';
     document.getElementById('add-name').value = '';
@@ -234,6 +261,7 @@ function saveNewEvent() {
     const endVal = document.getElementById('add-end-date').value;
     const name = document.getElementById('add-name').value.trim();
     const notes = document.getElementById('add-notes').value.trim();
+    const eventType = document.getElementById('add-type').value;
     
     if (!name || !startVal) return alert("Event Name and Start Date are required.");
 
@@ -242,8 +270,9 @@ function saveNewEvent() {
     if (end < start) end = new Date(start); 
 
     let current = new Date(start);
-    const invited = parseInt(document.getElementById('add-invited').value) || 0;
-    const accepted = parseInt(document.getElementById('add-accepted').value) || 0;
+    const isWorkEvent = eventType === 'Work Event';
+    const invited = isWorkEvent ? (parseInt(document.getElementById('add-invited').value) || 0) : 0;
+    const accepted = isWorkEvent ? (parseInt(document.getElementById('add-accepted').value) || 0) : 0;
 
     while (current <= end) {
         if (current.getDay() !== 0) { 
@@ -253,7 +282,8 @@ function saveNewEvent() {
                 date: formatDateObj(current),
                 invited: invited, 
                 accepted: accepted, 
-                notes: notes
+                notes: notes,
+                type: eventType
             });
         }
         current.setDate(current.getDate() + 1);
@@ -265,12 +295,18 @@ function saveNewEvent() {
 
 // EDIT Modal Logic
 function openEditModal(eventId) {
+    if (isGlobalView) return alert("Cannot edit events from the Global view.");
+
     const ev = eventsData.find(e => e.id === eventId);
     if (!ev) return;
 
     document.getElementById('edit-title').innerText = ev.name;
     document.getElementById('edit-old-name').value = ev.name;
     document.getElementById('edit-notes').value = ev.notes || '';
+    
+    const evType = ev.type || 'Work Event';
+    document.getElementById('edit-type').value = evType;
+    document.getElementById('edit-stats-wrapper').style.display = (evType === 'Work Event' ? 'block' : 'none');
     
     editRelatedEvents = eventsData.filter(e => e.name === ev.name).sort((a,b) => new Date(a.date) - new Date(b.date));
     
@@ -343,6 +379,7 @@ function updateRelatedEventsFromDOM() {
 function saveEditedEvent() {
     const oldName = document.getElementById('edit-old-name').value;
     const newNotes = document.getElementById('edit-notes').value.trim();
+    const eventType = document.getElementById('edit-type').value;
     
     updateRelatedEventsFromDOM(); 
     
@@ -356,6 +393,8 @@ function saveEditedEvent() {
     if (end < start) end = new Date(start);
     
     let current = new Date(start);
+    const isWorkEvent = eventType === 'Work Event';
+
     while (current <= end) {
         if (current.getDay() !== 0) {
             let dStr = formatDateObj(current);
@@ -365,9 +404,10 @@ function saveEditedEvent() {
                 id: generateId(),
                 name: oldName,
                 date: dStr,
-                invited: stat ? stat.invited : 0,
-                accepted: stat ? stat.accepted : 0,
-                notes: newNotes
+                invited: (isWorkEvent && stat) ? stat.invited : 0,
+                accepted: (isWorkEvent && stat) ? stat.accepted : 0,
+                notes: newNotes,
+                type: eventType
             });
         }
         current.setDate(current.getDate() + 1);
@@ -403,13 +443,21 @@ function renderCalendar() {
     const gridHeaders = document.querySelector('.grid-headers');
     gridHeaders.innerHTML = '';
     
-    if (eventsData.length === 0) { 
-        projectDateRange.innerText = "No events scheduled."; 
+    if (isGlobalView) {
+        projectDateRange.innerText = "All Projects";
+    }
+
+    // Apply Filter Strategy
+    let displayEvents = currentFilter === "All" ? eventsData : eventsData.filter(e => (e.type || 'Work Event') === currentFilter);
+
+    if (displayEvents.length === 0) { 
+        if (!isGlobalView) projectDateRange.innerText = "No events scheduled."; 
         return; 
     }
-    eventsData.forEach(ev => { if(!ev.id) ev.id = generateId(); });
+    
+    displayEvents.forEach(ev => { if(!ev.id) ev.id = generateId(); });
 
-    const hasMondayEvents = eventsData.some(e => new Date(e.date + 'T00:00:00').getDay() === 1);
+    const hasMondayEvents = displayEvents.some(e => new Date(e.date + 'T00:00:00').getDay() === 1);
     const colCount = hasMondayEvents ? 6 : 5;
     document.documentElement.style.setProperty('--col-count', colCount);
     
@@ -419,8 +467,8 @@ function renderCalendar() {
         <div class="day-label">Thu</div><div class="day-label">Fri</div><div class="day-label">Sat</div>
     `;
 
-    let minDate = new Date(eventsData[0].date + 'T00:00:00');
-    let maxDate = new Date(eventsData[eventsData.length - 1].date + 'T00:00:00');
+    let minDate = new Date(displayEvents[0].date + 'T00:00:00');
+    let maxDate = new Date(displayEvents[displayEvents.length - 1].date + 'T00:00:00');
 
     let today = new Date();
     today.setHours(0,0,0,0);
@@ -447,7 +495,9 @@ function renderCalendar() {
         }
     }
 
-    projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    if (!isGlobalView) {
+        projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    }
 
     let currentLoopDate = new Date(startOfGrid);
     const palette = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', '#6C5CE7', '#fd79a8', '#00b894', '#e17055'];
@@ -473,7 +523,7 @@ function renderCalendar() {
             lookAheadCounter = 0;
         }
 
-        let weekEvents = eventsData.filter(ev => weekDates.includes(ev.date));
+        let weekEvents = displayEvents.filter(ev => weekDates.includes(ev.date));
         let uniqueNames = [...new Set(weekEvents.map(e => e.name))];
         
         let eventBlocks = [];
@@ -533,7 +583,7 @@ function renderCalendar() {
             let isToday = (dateStr === todayStr);
             let bgClasses = `day-bg ${isDayEmpty && !isToday ? 'dimmed-empty' : ''} ${isToday ? 'today-highlight' : ''}`;
             
-            let dayTotals = weekEvents.filter(e => e.date === dateStr).reduce((acc, ev) => {
+            let dayTotals = weekEvents.filter(e => e.date === dateStr && (e.type || 'Work Event') === 'Work Event').reduce((acc, ev) => {
                 acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
             }, { invited: 0, accepted: 0 });
 
@@ -561,14 +611,29 @@ function renderCalendar() {
                 const hasNotes = ev.notes && ev.notes.trim().length > 0;
                 let segmentStyle = (isMulti && idx < block.span - 1) ? `border-right: 1px dashed rgba(255,255,255,0.15);` : '';
                 
+                const evType = ev.type || 'Work Event';
+                let statsDisplayHtml = '';
+                
+                if (evType === 'Delivery') {
+                    statsDisplayHtml = `<span class="type-icon" title="Delivery">🚚</span>`;
+                } else if (evType === 'Inspection') {
+                    statsDisplayHtml = `<span class="type-icon" title="Inspection">🏷️✅</span>`;
+                } else if (evType === 'Other') {
+                    statsDisplayHtml = `<span class="type-icon" title="Other">📅</span>`;
+                } else {
+                    statsDisplayHtml = `
+                        <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
+                        <span class="stat-divider">/</span>
+                        <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
+                    `;
+                }
+                
                 return `
                     <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
                         ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
                         <div class="event-name">${ev.name}</div>
                         <div class="event-stats">
-                            <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
-                            <span class="stat-divider">/</span>
-                            <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
+                            ${statsDisplayHtml}
                         </div>
                     </div>
                 `;
