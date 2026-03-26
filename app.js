@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.9
-// Changes: Completely rewrote the Excel date parsing logic to fix the 2-day offset bug. Removed the +1 offset from the epoch calculation and implemented getUTCFullYear, getUTCMonth, and getUTCDate to prevent local timezone offsets from shifting UTC midnights into the previous day.
+// Version: V1.10
+// Changes: Added logic to detect if the project has zero Monday events and dynamically scale the grid to 5 columns if true. Added 'dimmed-empty' class to ANY date missing an event. Updated modal to support date ranges and modified saveNewEvent to populate the database with an entry for each day in a range (skipping Sundays).
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -64,7 +64,6 @@ async function fetchDatabaseData() {
             }
 
             if(eventsData.length > 0) {
-                // Ensure array is chronologically sorted on load
                 eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
                 setStatus('Data loaded.', 'success');
                 lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
@@ -137,7 +136,7 @@ function handleFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         processData(json);
@@ -161,27 +160,15 @@ function processData(data) {
 
         let dateStr = "";
         
-        if (typeof dateVal === 'number') {
-            // JS epoch is Jan 1 1970. Excel epoch is conceptually Jan 1 1900.
-            // The exact difference (including Excel's 1900 leap year bug) is exactly 25569 days.
-            // Math.round fixes any floating-point imperfecions.
-            const jsDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
-            
-            // CRITICAL: We MUST use getUTC methods to extract the string. 
-            // If we use local methods, timezones behind UTC (like MDT/MST) will shift 
-            // the midnight UTC timestamp backward into the previous day.
-            const yyyy = jsDate.getUTCFullYear();
-            const mm = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-            const dd = String(jsDate.getUTCDate()).padStart(2, '0');
+        if (dateVal instanceof Date) {
+            const yyyy = dateVal.getUTCFullYear();
+            const mm = String(dateVal.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(dateVal.getUTCDate()).padStart(2, '0');
             dateStr = `${yyyy}-${mm}-${dd}`;
         } else {
-            // Fallback just in case the cell was explicitly formatted as plain text
             const d = new Date(dateVal);
             if (!isNaN(d)) {
-                const yyyy = d.getFullYear();
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                dateStr = `${yyyy}-${mm}-${dd}`;
+                dateStr = formatDateObj(d);
             } else {
                 continue; 
             }
@@ -198,14 +185,13 @@ function processData(data) {
             });
         }
     }
-    
-    // Sort chronologically so calendar processes events cleanly regardless of spreadsheet order
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
 // Modal Logic
 function openAddModal(dateStr) {
-    document.getElementById('add-date').value = dateStr;
+    document.getElementById('add-start-date').value = dateStr;
+    document.getElementById('add-end-date').value = dateStr;
     document.getElementById('add-name').value = '';
     document.getElementById('add-invited').value = 0;
     document.getElementById('add-accepted').value = 0;
@@ -235,18 +221,40 @@ function closeModals() {
 }
 
 function saveNewEvent() {
-    const date = document.getElementById('add-date').value;
+    const startVal = document.getElementById('add-start-date').value;
+    const endVal = document.getElementById('add-end-date').value;
     const name = document.getElementById('add-name').value.trim();
-    if (!name) return alert("Event Name is required.");
+    
+    if (!name || !startVal) return alert("Event Name and Start Date are required.");
 
-    eventsData.push({
-        id: generateId(), name: name, date: date,
-        invited: parseInt(document.getElementById('add-invited').value) || 0,
-        accepted: parseInt(document.getElementById('add-accepted').value) || 0,
-        notes: ""
-    });
+    let start = new Date(startVal + 'T00:00:00');
+    let end = endVal ? new Date(endVal + 'T00:00:00') : new Date(start);
+    if (end < start) end = new Date(start); // Fallback to single day if end is prior to start
 
-    closeModals(); renderCalendar(); saveToDatabase();
+    let current = new Date(start);
+    const invited = parseInt(document.getElementById('add-invited').value) || 0;
+    const accepted = parseInt(document.getElementById('add-accepted').value) || 0;
+
+    // Loop through range to create an event for every day
+    while (current <= end) {
+        if (current.getDay() !== 0) { // Do not schedule events on Sundays
+            const dStr = formatDateObj(current);
+            eventsData.push({
+                id: generateId(), 
+                name: name, 
+                date: dStr,
+                invited: invited, 
+                accepted: accepted, 
+                notes: ""
+            });
+        }
+        current.setDate(current.getDate() + 1);
+    }
+
+    eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
+    closeModals(); 
+    renderCalendar(); 
+    saveToDatabase();
 }
 
 function saveEditedEvent() {
@@ -279,8 +287,33 @@ function getStartOfWeek(date) {
 // Render Logic
 function renderCalendar() {
     calendarGrid.innerHTML = '';
-    if (eventsData.length === 0) { projectDateRange.innerText = "No events scheduled."; return; }
+    const gridHeaders = document.querySelector('.grid-headers');
+    gridHeaders.innerHTML = '';
+    
+    if (eventsData.length === 0) { 
+        projectDateRange.innerText = "No events scheduled."; 
+        return; 
+    }
     eventsData.forEach(ev => { if(!ev.id) ev.id = generateId(); });
+
+    // Determine if ANY events exist on a Monday across the entire project
+    const hasMondayEvents = eventsData.some(e => {
+        const d = new Date(e.date + 'T00:00:00');
+        return d.getDay() === 1;
+    });
+
+    // Dynamically adjust CSS column count and generate headers
+    const colCount = hasMondayEvents ? 6 : 5;
+    document.documentElement.style.setProperty('--col-count', colCount);
+    
+    if (hasMondayEvents) gridHeaders.innerHTML += `<div class="day-label">Mon</div>`;
+    gridHeaders.innerHTML += `
+        <div class="day-label">Tue</div>
+        <div class="day-label">Wed</div>
+        <div class="day-label">Thu</div>
+        <div class="day-label">Fri</div>
+        <div class="day-label">Sat</div>
+    `;
 
     let minDate = new Date(eventsData[0].date + 'T00:00:00');
     let maxDate = new Date(eventsData[0].date + 'T00:00:00');
@@ -311,7 +344,6 @@ function renderCalendar() {
         let weekEvents = eventsData.filter(ev => weekDates.includes(ev.date));
         let uniqueNames = [...new Set(weekEvents.map(e => e.name))];
         
-        // 1. Group contiguous days into Blocks
         let eventBlocks = [];
         uniqueNames.forEach(name => {
             let startCol = -1;
@@ -332,13 +364,11 @@ function renderCalendar() {
             if (startCol !== -1) eventBlocks.push({ name, startCol, span: segments.length, segments });
         });
 
-        // 2. Sort to float shorter/earlier events up
         eventBlocks.sort((a, b) => {
             if (a.startCol !== b.startCol) return a.startCol - b.startCol;
             return b.span - a.span; 
         });
 
-        // 3. Assign row slots
         let slotsOccupied = [];
         eventBlocks.forEach(block => {
             let row = 0;
@@ -360,40 +390,49 @@ function renderCalendar() {
         let maxSlots = slotsOccupied.length;
         let weekHtml = `<div class="week-container">`;
 
-        // 4. Render Day Backgrounds, Headers, and Footers
+        // Render Day Backgrounds, Headers, and Footers
         for (let i = 0; i < 6; i++) {
+            // Skip rendering Monday column entirely if no Monday events exist
+            if (!hasMondayEvents && i === 0) continue;
+            
+            // Adjust grid column placement based on if Monday is present
+            let gridCol = hasMondayEvents ? i + 1 : i; 
+            
             let dateStr = weekDates[i];
             let d = new Date(currentLoopDate); d.setDate(d.getDate() + i);
             let isDayEmpty = !weekEvents.some(e => e.date === dateStr);
-            let bgClasses = `day-bg ${i === 5 ? 'weekend' : ''} ${(i === 0 && isDayEmpty) ? 'dimmed-empty' : ''}`;
+            let bgClasses = `day-bg ${isDayEmpty ? 'dimmed-empty' : ''}`;
             
             let dayTotals = weekEvents.filter(e => e.date === dateStr).reduce((acc, ev) => {
                 acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
             }, { invited: 0, accepted: 0 });
 
-            weekHtml += `<div class="${bgClasses}" style="grid-column: ${i + 1}; grid-row: 1 / span ${maxSlots + 2};"></div>`;
+            weekHtml += `<div class="${bgClasses}" style="grid-column: ${gridCol}; grid-row: 1 / span ${maxSlots + 2};"></div>`;
             
             weekHtml += `
-                <div class="cell-header" style="grid-column: ${i + 1}; grid-row: 1;">
+                <div class="cell-header" style="grid-column: ${gridCol}; grid-row: 1;">
                     <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
                     ${isDayEmpty ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle">${dayTotals.accepted}</span><span class="stat-divider">/</span><span class="stat-circle invited-circle">${dayTotals.invited}</span></div>`}
                 </div>
             `;
             
             weekHtml += `
-                <div class="cell-footer" style="grid-column: ${i + 1}; grid-row: ${maxSlots + 2};">
+                <div class="cell-footer" style="grid-column: ${gridCol}; grid-row: ${maxSlots + 2};">
                     <button class="add-btn" onclick="openAddModal('${dateStr}')" title="Add Event">+</button>
                 </div>
             `;
         }
 
-        // 5. Render Spanning Blocks over the Grid
+        // Render Spanning Blocks over the Grid
         eventBlocks.forEach(block => {
             let colorIdx = uniqueNames.indexOf(block.name);
             let styleColor = palette[colorIdx % palette.length];
             let isMulti = block.span > 1;
             
-            let cardStyle = `grid-column: ${block.startCol + 1} / span ${block.span}; grid-row: ${block.slot + 2}; border-left-color: ${styleColor};`;
+            // Adjust spanning grid placement based on if Monday is present
+            let gridCol = hasMondayEvents ? block.startCol + 1 : block.startCol;
+            
+            let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2}; border-left-color: ${styleColor};`;
             if (isMulti) cardStyle += ` border-right-color: ${styleColor}; background-color: ${styleColor}1A;`;
             
             let segmentsHtml = block.segments.map((ev, idx) => {
