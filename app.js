@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.16
-// Changes: Added logic for "Global" URL parameter (bypasses saving/uploading). Integrated the new Event Type fields into the modals and data structure. Handled the show/hide behavior of the stats inputs based on type. Implemented the header Type Filter. Modified the card renderer to output emojis for Delivery, Inspection, and Other types.
+// Version: V1.17
+// Changes: Implemented the auto-scroll reset upon Collapse/Expand. Stripped out the stat dividers. Added dynamic label/input manipulation based on Event Type selection. Tagged spreadsheet parsed events with an `imported` flag to lock their Edit Modal dropdown and enforce 'Work Event'.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -146,6 +146,15 @@ function setupEventListeners() {
             } else {
                 this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> Collapse Events`;
             }
+
+            // Reposition scroll back to today after toggling
+            const target = document.getElementById('current-week-scroll-target');
+            const stickyHeader = document.querySelector('.sticky-top-section');
+            if (target && stickyHeader) {
+                const headerHeight = stickyHeader.offsetHeight;
+                const y = target.getBoundingClientRect().top + window.scrollY - headerHeight - 20; 
+                window.scrollTo({ top: y, behavior: 'smooth' });
+            }
         });
     }
 
@@ -157,11 +166,52 @@ function setupEventListeners() {
         });
     }
 
+    // Dynamic Type Adapters for Add Modal
     document.getElementById('add-type').addEventListener('change', function() {
-        document.getElementById('add-stats-wrapper').style.display = (this.value === 'Work Event' ? 'flex' : 'none');
+        const val = this.value;
+        const startLabel = document.getElementById('add-start-date-label');
+        const endGroup = document.getElementById('add-end-date-group');
+        const nameLabel = document.getElementById('add-name-label');
+        const statsWrapper = document.getElementById('add-stats-wrapper');
+
+        if (val === 'Work Event') {
+            statsWrapper.style.display = 'flex';
+            endGroup.style.display = 'flex';
+            startLabel.innerText = 'Start Date';
+            nameLabel.innerText = 'Event Name';
+        } else if (val === 'Delivery' || val === 'Inspection') {
+            statsWrapper.style.display = 'none';
+            endGroup.style.display = 'none';
+            startLabel.innerText = `Date of ${val}`;
+            nameLabel.innerText = 'Description';
+        } else {
+            statsWrapper.style.display = 'none';
+            endGroup.style.display = 'flex';
+            startLabel.innerText = 'Start Date';
+            nameLabel.innerText = 'Event Name';
+        }
     });
+
+    // Dynamic Type Adapters for Edit Modal
     document.getElementById('edit-type').addEventListener('change', function() {
-        document.getElementById('edit-stats-wrapper').style.display = (this.value === 'Work Event' ? 'block' : 'none');
+        const val = this.value;
+        const startLabel = document.getElementById('edit-start-date-label');
+        const endGroup = document.getElementById('edit-end-date-group');
+        const statsWrapper = document.getElementById('edit-stats-wrapper');
+
+        if (val === 'Work Event') {
+            statsWrapper.style.display = 'block';
+            endGroup.style.display = 'flex';
+            startLabel.innerText = 'Start Date';
+        } else if (val === 'Delivery' || val === 'Inspection') {
+            statsWrapper.style.display = 'none';
+            endGroup.style.display = 'none';
+            startLabel.innerText = `Date of ${val}`;
+        } else {
+            statsWrapper.style.display = 'none';
+            endGroup.style.display = 'flex';
+            startLabel.innerText = 'Start Date';
+        }
     });
 
     document.getElementById('edit-start-date').addEventListener('change', function() {
@@ -225,12 +275,14 @@ function processData(data) {
         if (existingIndex > -1) {
             eventsData[existingIndex].invited = invited;
             eventsData[existingIndex].accepted = accepted;
-            if (!eventsData[existingIndex].type) eventsData[existingIndex].type = 'Work Event';
+            eventsData[existingIndex].type = 'Work Event'; // Force spreadsheet events to Work Event
+            eventsData[existingIndex].imported = true;
         } else {
             eventsData.push({
                 id: generateId(), name: eventName, date: dateStr,
                 invited: invited, accepted: accepted, notes: "",
-                type: 'Work Event' // Excel Default
+                type: 'Work Event',
+                imported: true
             });
         }
     }
@@ -242,8 +294,10 @@ function openAddModal() {
     if (!projectNumber) return alert("Please add a ?project=XYZ variable to your URL to begin working.");
     if (isGlobalView) return alert("Cannot add events while in Global 'All Projects' view.");
 
-    document.getElementById('add-type').value = 'Work Event';
-    document.getElementById('add-stats-wrapper').style.display = 'flex';
+    const typeSelect = document.getElementById('add-type');
+    typeSelect.value = 'Work Event';
+    typeSelect.dispatchEvent(new Event('change')); // Force reset
+
     document.getElementById('add-start-date').value = '';
     document.getElementById('add-end-date').value = '';
     document.getElementById('add-name').value = '';
@@ -263,11 +317,13 @@ function saveNewEvent() {
     const notes = document.getElementById('add-notes').value.trim();
     const eventType = document.getElementById('add-type').value;
     
-    if (!name || !startVal) return alert("Event Name and Start Date are required.");
+    if (!name || !startVal) return alert("Event Name/Description and Date are required.");
 
     let start = new Date(startVal + 'T00:00:00');
     let end = endVal ? new Date(endVal + 'T00:00:00') : new Date(start);
-    if (end < start) end = new Date(start); 
+    if (end < start || eventType === 'Delivery' || eventType === 'Inspection') {
+        end = new Date(start); 
+    }
 
     let current = new Date(start);
     const isWorkEvent = eventType === 'Work Event';
@@ -283,7 +339,8 @@ function saveNewEvent() {
                 invited: invited, 
                 accepted: accepted, 
                 notes: notes,
-                type: eventType
+                type: eventType,
+                imported: false
             });
         }
         current.setDate(current.getDate() + 1);
@@ -304,9 +361,21 @@ function openEditModal(eventId) {
     document.getElementById('edit-old-name').value = ev.name;
     document.getElementById('edit-notes').value = ev.notes || '';
     
-    const evType = ev.type || 'Work Event';
-    document.getElementById('edit-type').value = evType;
-    document.getElementById('edit-stats-wrapper').style.display = (evType === 'Work Event' ? 'block' : 'none');
+    const typeGroup = document.getElementById('edit-type-group');
+    const importedNote = document.getElementById('edit-imported-note');
+    const typeSelect = document.getElementById('edit-type');
+    
+    if (ev.imported) {
+        typeGroup.style.display = 'none';
+        importedNote.style.display = 'flex';
+        typeSelect.value = 'Work Event';
+    } else {
+        typeGroup.style.display = 'flex';
+        importedNote.style.display = 'none';
+        typeSelect.value = ev.type || 'Work Event';
+    }
+
+    typeSelect.dispatchEvent(new Event('change')); // Force dynamic labels to update
     
     editRelatedEvents = eventsData.filter(e => e.name === ev.name).sort((a,b) => new Date(a.date) - new Date(b.date));
     
@@ -380,6 +449,7 @@ function saveEditedEvent() {
     const oldName = document.getElementById('edit-old-name').value;
     const newNotes = document.getElementById('edit-notes').value.trim();
     const eventType = document.getElementById('edit-type').value;
+    const isImported = editRelatedEvents[0] ? editRelatedEvents[0].imported : false;
     
     updateRelatedEventsFromDOM(); 
     
@@ -390,7 +460,9 @@ function saveEditedEvent() {
     
     let start = new Date(startStr + 'T00:00:00');
     let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
-    if (end < start) end = new Date(start);
+    if (end < start || eventType === 'Delivery' || eventType === 'Inspection') {
+        end = new Date(start);
+    }
     
     let current = new Date(start);
     const isWorkEvent = eventType === 'Work Event';
@@ -407,7 +479,8 @@ function saveEditedEvent() {
                 invited: (isWorkEvent && stat) ? stat.invited : 0,
                 accepted: (isWorkEvent && stat) ? stat.accepted : 0,
                 notes: newNotes,
-                type: eventType
+                type: eventType,
+                imported: isImported
             });
         }
         current.setDate(current.getDate() + 1);
@@ -447,7 +520,6 @@ function renderCalendar() {
         projectDateRange.innerText = "All Projects";
     }
 
-    // Apply Filter Strategy
     let displayEvents = currentFilter === "All" ? eventsData : eventsData.filter(e => (e.type || 'Work Event') === currentFilter);
 
     if (displayEvents.length === 0) { 
@@ -592,7 +664,7 @@ function renderCalendar() {
             weekHtml += `
                 <div class="cell-header" style="grid-column: ${gridCol}; grid-row: 1;">
                     <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
-                    ${isDayEmpty ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle">${dayTotals.accepted}</span><span class="stat-divider">/</span><span class="stat-circle invited-circle">${dayTotals.invited}</span></div>`}
+                    ${isDayEmpty ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" title="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" title="Invited">${dayTotals.invited}</span></div>`}
                 </div>
             `;
         }
@@ -623,7 +695,6 @@ function renderCalendar() {
                 } else {
                     statsDisplayHtml = `
                         <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
-                        <span class="stat-divider">/</span>
                         <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
                     `;
                 }
