@@ -1,10 +1,10 @@
 // File: app.js
-// Version: V2.1
-// Changes: Fixed a bug in `fetchDatabaseData()` where the script was blindly parsing and injecting every row from the database into `eventsData`. Added a client-side filter to only ingest JSON payloads if `isGlobalView` is true or if the row's Project ID strictly matches the URL `projectNumber`.
+// Version: V2.2
+// Changes: Switched the Glide Table ID to the new Project table. Updated the row mapping to use the native `$rowID` as the Project ID. Dynamically constructed the Project Title using the read-only columns (pt, address, citySt). Updated the mutation payload to only write to the `calendarJson` (KYRQV) and `calendarCount` (ltptW) columns.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
-const GLIDE_TABLE_ID = 'native-table-89a2d186-a6d1-43f3-a973-bd3dd4bc4838';
+const GLIDE_TABLE_ID = 'native-table-jl3zoddzYY6WxSA4YQZj';
 const GLIDE_TOKEN = '77804d07-3b60-415c-a8f8-4f84f33b974a';
 
 // DOM Elements
@@ -111,12 +111,24 @@ async function fetchDatabaseData() {
         projectRowIds = {};
         
         rows.forEach(row => {
-            let pid = row['Name']; 
-            let ptitle = row['GTdzD'] || pid; 
-            let rawJson = row['bunt6']; 
-            projectRowIds[pid] = row['$rowID']; 
+            // Glide natively assigns a unique $rowID to every row, which perfectly acts as our Project ID
+            let pid = row['$rowID']; 
+            
+            // Construct the dynamic title from Read-Only columns
+            let pt = row['2UR8V'] || '';
+            let address = row['Name'] || '';
+            let citySt = row['8V1wO'] || '';
+            
+            let ptitle = `PT# ${pt}`;
+            if (address) ptitle += ` - ${address}`;
+            if (citySt) ptitle += `, ${citySt}`;
+            if (!pt && !address && !citySt) ptitle = 'Unnamed Project';
 
-            if (!isGlobalView && String(pid) === String(projectNumber) && projectTitle && ptitle !== projectTitle) {
+            let rawJson = row['KYRQV']; 
+            projectRowIds[pid] = pid; 
+
+            // If this is a specific project view and the row is blank, allow the URL to override the title
+            if (!isGlobalView && String(pid) === String(projectNumber) && projectTitle && !pt && !address) {
                 ptitle = projectTitle;
             }
 
@@ -129,8 +141,6 @@ async function fetchDatabaseData() {
                     let parsed = JSON.parse(rawJson);
                     let evs = Array.isArray(parsed) ? parsed : (parsed.eventsData || []);
                     
-                    // CRITICAL FIX: Only push events to the local memory if we are in Global View 
-                    // OR if this row specifically matches our target projectNumber.
                     if (isGlobalView || String(pid) === String(projectNumber)) {
                         evs.forEach(ev => {
                             ev.projectId = pid;
@@ -221,10 +231,8 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
     const mutation = {
         tableName: GLIDE_TABLE_ID,
         columnValues: {
-            "Name": String(targetId),
-            "bunt6": JSON.stringify(payload),
-            "ZCpNj": cleanEvents.length,
-            "GTdzD": String(targetTitle)
+            "KYRQV": JSON.stringify(payload),
+            "ltptW": String(cleanEvents.length) // Enforced string type as requested
         }
     };
 
