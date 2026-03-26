@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.10
-// Changes: Added logic to detect if the project has zero Monday events and dynamically scale the grid to 5 columns if true. Added 'dimmed-empty' class to ANY date missing an event. Updated modal to support date ranges and modified saveNewEvent to populate the database with an entry for each day in a range (skipping Sundays).
+// Version: V1.11
+// Changes: Implemented chronological timeline expansion and "Today" highlighting. Added a 4-week 'Look Ahead' wrapper that activates if today is relevant. Rewrote the Edit Modal to dynamically render I/A fields for every day in a multi-date range, allowing real-time injection of new days. 
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -22,6 +22,7 @@ const editModal = document.getElementById('edit-modal');
 let eventsData = [];
 let lastUpdatedDate = "";
 let projectNumber = null;
+let editRelatedEvents = []; // Temporary store for dynamic editing
 
 // Initialize
 function init() {
@@ -126,6 +127,16 @@ function setupEventListeners() {
     fileInput.addEventListener('change', (e) => {
         if (e.target.files.length) handleFile(e.target.files[0]);
     });
+
+    // Dynamic Edit Range Listeners
+    document.getElementById('edit-start-date').addEventListener('change', function() {
+        updateRelatedEventsFromDOM();
+        renderEditStats(this.value, document.getElementById('edit-end-date').value);
+    });
+    document.getElementById('edit-end-date').addEventListener('change', function() {
+        updateRelatedEventsFromDOM();
+        renderEditStats(document.getElementById('edit-start-date').value, this.value);
+    });
 }
 
 // File Processing
@@ -188,84 +199,172 @@ function processData(data) {
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
-// Modal Logic
+// ADD Modal Logic
 function openAddModal(dateStr) {
     document.getElementById('add-start-date').value = dateStr;
     document.getElementById('add-end-date').value = dateStr;
     document.getElementById('add-name').value = '';
     document.getElementById('add-invited').value = 0;
     document.getElementById('add-accepted').value = 0;
+    document.getElementById('add-notes').value = '';
     
     modalOverlay.classList.remove('hidden');
     addModal.classList.remove('hidden');
     editModal.classList.add('hidden');
 }
 
-function openEditModal(eventId) {
-    const ev = eventsData.find(e => e.id === eventId);
-    if (!ev) return;
-
-    document.getElementById('edit-title').innerText = ev.name;
-    document.getElementById('edit-id').value = ev.id;
-    document.getElementById('edit-invited').value = ev.invited || 0;
-    document.getElementById('edit-accepted').value = ev.accepted || 0;
-    document.getElementById('edit-notes').value = ev.notes || '';
-
-    modalOverlay.classList.remove('hidden');
-    editModal.classList.remove('hidden');
-    addModal.classList.add('hidden');
-}
-
-function closeModals() {
-    modalOverlay.classList.add('hidden');
-}
-
 function saveNewEvent() {
     const startVal = document.getElementById('add-start-date').value;
     const endVal = document.getElementById('add-end-date').value;
     const name = document.getElementById('add-name').value.trim();
+    const notes = document.getElementById('add-notes').value.trim();
     
     if (!name || !startVal) return alert("Event Name and Start Date are required.");
 
     let start = new Date(startVal + 'T00:00:00');
     let end = endVal ? new Date(endVal + 'T00:00:00') : new Date(start);
-    if (end < start) end = new Date(start); // Fallback to single day if end is prior to start
+    if (end < start) end = new Date(start); 
 
     let current = new Date(start);
     const invited = parseInt(document.getElementById('add-invited').value) || 0;
     const accepted = parseInt(document.getElementById('add-accepted').value) || 0;
 
-    // Loop through range to create an event for every day
     while (current <= end) {
-        if (current.getDay() !== 0) { // Do not schedule events on Sundays
-            const dStr = formatDateObj(current);
+        if (current.getDay() !== 0) { 
             eventsData.push({
                 id: generateId(), 
                 name: name, 
-                date: dStr,
+                date: formatDateObj(current),
                 invited: invited, 
                 accepted: accepted, 
-                notes: ""
+                notes: notes
             });
         }
         current.setDate(current.getDate() + 1);
     }
 
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
-    closeModals(); 
-    renderCalendar(); 
-    saveToDatabase();
+    closeModals(); renderCalendar(); saveToDatabase();
+}
+
+// EDIT Modal Logic (Dynamic Range)
+function openEditModal(eventId) {
+    const ev = eventsData.find(e => e.id === eventId);
+    if (!ev) return;
+
+    document.getElementById('edit-title').innerText = ev.name;
+    document.getElementById('edit-old-name').value = ev.name;
+    document.getElementById('edit-notes').value = ev.notes || '';
+    
+    // Group all events with same name for range editing
+    editRelatedEvents = eventsData.filter(e => e.name === ev.name).sort((a,b) => new Date(a.date) - new Date(b.date));
+    
+    let startStr = editRelatedEvents[0].date;
+    let endStr = editRelatedEvents[editRelatedEvents.length - 1].date;
+    
+    document.getElementById('edit-start-date').value = startStr;
+    document.getElementById('edit-end-date').value = endStr;
+    
+    renderEditStats(startStr, endStr);
+
+    modalOverlay.classList.remove('hidden');
+    editModal.classList.remove('hidden');
+    addModal.classList.add('hidden');
+}
+
+function renderEditStats(startStr, endStr) {
+    const container = document.getElementById('edit-daily-stats');
+    container.innerHTML = '';
+    
+    if (!startStr) return;
+    
+    let start = new Date(startStr + 'T00:00:00');
+    let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
+    if (end < start) end = new Date(start);
+    
+    let current = new Date(start);
+    while (current <= end) {
+        if (current.getDay() !== 0) { // Skip Sundays
+            let dStr = formatDateObj(current);
+            let existing = editRelatedEvents.find(e => e.date === dStr);
+            let inv = existing ? existing.invited : 0;
+            let acc = existing ? existing.accepted : 0;
+            
+            container.innerHTML += `
+                <div class="form-row daily-stat-row" data-date="${dStr}">
+                    <div class="stat-date-label">${current.getMonth()+1}/${current.getDate()}</div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
+                        <label>I:</label>
+                        <input type="number" class="edit-inv-input" value="${inv}" min="0" style="padding: 5px;">
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
+                        <label>A:</label>
+                        <input type="number" class="edit-acc-input" value="${acc}" min="0" style="padding: 5px;">
+                    </div>
+                </div>
+            `;
+        }
+        current.setDate(current.getDate() + 1);
+    }
+}
+
+function updateRelatedEventsFromDOM() {
+    const rows = document.querySelectorAll('.daily-stat-row');
+    rows.forEach(row => {
+        let dStr = row.getAttribute('data-date');
+        let inv = parseInt(row.querySelector('.edit-inv-input').value) || 0;
+        let acc = parseInt(row.querySelector('.edit-acc-input').value) || 0;
+        
+        let existing = editRelatedEvents.find(e => e.date === dStr);
+        if (existing) {
+            existing.invited = inv;
+            existing.accepted = acc;
+        } else {
+            editRelatedEvents.push({ date: dStr, invited: inv, accepted: acc });
+        }
+    });
 }
 
 function saveEditedEvent() {
-    const ev = eventsData.find(e => e.id === document.getElementById('edit-id').value);
-    if (!ev) return;
-
-    ev.invited = parseInt(document.getElementById('edit-invited').value) || 0;
-    ev.accepted = parseInt(document.getElementById('edit-accepted').value) || 0;
-    ev.notes = document.getElementById('edit-notes').value.trim();
-
+    const oldName = document.getElementById('edit-old-name').value;
+    const newNotes = document.getElementById('edit-notes').value.trim();
+    
+    updateRelatedEventsFromDOM(); 
+    
+    // Purge old events for this block
+    eventsData = eventsData.filter(e => e.name !== oldName);
+    
+    const startStr = document.getElementById('edit-start-date').value;
+    const endStr = document.getElementById('edit-end-date').value;
+    
+    let start = new Date(startStr + 'T00:00:00');
+    let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
+    if (end < start) end = new Date(start);
+    
+    let current = new Date(start);
+    while (current <= end) {
+        if (current.getDay() !== 0) {
+            let dStr = formatDateObj(current);
+            let stat = editRelatedEvents.find(e => e.date === dStr);
+            
+            eventsData.push({
+                id: generateId(),
+                name: oldName,
+                date: dStr,
+                invited: stat ? stat.invited : 0,
+                accepted: stat ? stat.accepted : 0,
+                notes: newNotes
+            });
+        }
+        current.setDate(current.getDate() + 1);
+    }
+    
+    eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
     closeModals(); renderCalendar(); saveToDatabase();
+}
+
+function closeModals() {
+    modalOverlay.classList.add('hidden');
 }
 
 // Utilities
@@ -296,49 +395,75 @@ function renderCalendar() {
     }
     eventsData.forEach(ev => { if(!ev.id) ev.id = generateId(); });
 
-    // Determine if ANY events exist on a Monday across the entire project
-    const hasMondayEvents = eventsData.some(e => {
-        const d = new Date(e.date + 'T00:00:00');
-        return d.getDay() === 1;
-    });
-
-    // Dynamically adjust CSS column count and generate headers
+    const hasMondayEvents = eventsData.some(e => new Date(e.date + 'T00:00:00').getDay() === 1);
     const colCount = hasMondayEvents ? 6 : 5;
     document.documentElement.style.setProperty('--col-count', colCount);
     
     if (hasMondayEvents) gridHeaders.innerHTML += `<div class="day-label">Mon</div>`;
     gridHeaders.innerHTML += `
-        <div class="day-label">Tue</div>
-        <div class="day-label">Wed</div>
-        <div class="day-label">Thu</div>
-        <div class="day-label">Fri</div>
-        <div class="day-label">Sat</div>
+        <div class="day-label">Tue</div><div class="day-label">Wed</div>
+        <div class="day-label">Thu</div><div class="day-label">Fri</div><div class="day-label">Sat</div>
     `;
 
     let minDate = new Date(eventsData[0].date + 'T00:00:00');
-    let maxDate = new Date(eventsData[0].date + 'T00:00:00');
+    let maxDate = new Date(eventsData[eventsData.length - 1].date + 'T00:00:00');
 
-    eventsData.forEach(ev => {
-        const d = new Date(ev.date + 'T00:00:00');
-        if (d < minDate) minDate = d;
-        if (d > maxDate) maxDate = d;
-    });
+    // "Today" Timeline Logic
+    let today = new Date();
+    today.setHours(0,0,0,0);
+    let todayStr = formatDateObj(today);
+    let startOfTodayWeek = getStartOfWeek(today);
+    
+    let startOfGrid = getStartOfWeek(minDate);
+    let endOfGridWeek = getStartOfWeek(maxDate);
+    endOfGridWeek.setDate(endOfGridWeek.getDate() + 5); 
+
+    let showLookAhead = false;
+    let msDiff = startOfTodayWeek.getTime() - startOfGrid.getTime();
+    let weeksDiff = Math.floor(msDiff / (7 * 86400000));
+
+    // If today is within event window OR up to 4 weeks prior
+    if ((weeksDiff >= -4) && startOfTodayWeek <= getStartOfWeek(maxDate)) {
+        showLookAhead = true;
+        
+        // Ensure grid starts early enough to show today
+        if (startOfTodayWeek < startOfGrid) {
+            startOfGrid = new Date(startOfTodayWeek);
+        }
+        
+        // Ensure grid runs at least 4 weeks past today
+        let minLookAheadEnd = new Date(startOfTodayWeek);
+        minLookAheadEnd.setDate(minLookAheadEnd.getDate() + 27); 
+        if (endOfGridWeek < minLookAheadEnd) {
+            endOfGridWeek = new Date(minLookAheadEnd);
+        }
+    }
 
     projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
-    const startOfGrid = getStartOfWeek(minDate);
-    const endOfGridWeek = getStartOfWeek(maxDate);
-    endOfGridWeek.setDate(endOfGridWeek.getDate() + 5); 
-
     let currentLoopDate = new Date(startOfGrid);
     const palette = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', '#6C5CE7', '#fd79a8', '#00b894', '#e17055'];
+    
+    let htmlStr = '';
+    let inLookAhead = false;
+    let lookAheadCounter = 0;
 
-    while (currentLoopDate <= endOfGridWeek) {
+    while (currentLoopDate <= endOfGridWeek || (inLookAhead && lookAheadCounter < 4)) {
         let weekDates = [];
         for(let i = 0; i < 6; i++) {
             let d = new Date(currentLoopDate);
             d.setDate(d.getDate() + i);
             weekDates.push(formatDateObj(d));
+        }
+
+        // Trigger wrapper for the 4-week window
+        if (showLookAhead && currentLoopDate.getTime() === startOfTodayWeek.getTime()) {
+            htmlStr += `
+                <div class="look-ahead-wrapper" id="current-week-scroll-target">
+                    <div class="look-ahead-title">3-Week Look Ahead</div>
+            `;
+            inLookAhead = true;
+            lookAheadCounter = 0;
         }
 
         let weekEvents = eventsData.filter(ev => weekDates.includes(ev.date));
@@ -390,18 +515,18 @@ function renderCalendar() {
         let maxSlots = slotsOccupied.length;
         let weekHtml = `<div class="week-container">`;
 
-        // Render Day Backgrounds, Headers, and Footers
+        // Render Backgrounds and Headers
         for (let i = 0; i < 6; i++) {
-            // Skip rendering Monday column entirely if no Monday events exist
             if (!hasMondayEvents && i === 0) continue;
-            
-            // Adjust grid column placement based on if Monday is present
             let gridCol = hasMondayEvents ? i + 1 : i; 
             
             let dateStr = weekDates[i];
             let d = new Date(currentLoopDate); d.setDate(d.getDate() + i);
             let isDayEmpty = !weekEvents.some(e => e.date === dateStr);
-            let bgClasses = `day-bg ${isDayEmpty ? 'dimmed-empty' : ''}`;
+            
+            // Highlight today's background
+            let isToday = (dateStr === todayStr);
+            let bgClasses = `day-bg ${isDayEmpty && !isToday ? 'dimmed-empty' : ''} ${isToday ? 'today-highlight' : ''}`;
             
             let dayTotals = weekEvents.filter(e => e.date === dateStr).reduce((acc, ev) => {
                 acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
@@ -423,13 +548,11 @@ function renderCalendar() {
             `;
         }
 
-        // Render Spanning Blocks over the Grid
+        // Render Event Blocks
         eventBlocks.forEach(block => {
             let colorIdx = uniqueNames.indexOf(block.name);
             let styleColor = palette[colorIdx % palette.length];
             let isMulti = block.span > 1;
-            
-            // Adjust spanning grid placement based on if Monday is present
             let gridCol = hasMondayEvents ? block.startCol + 1 : block.startCol;
             
             let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2}; border-left-color: ${styleColor};`;
@@ -462,8 +585,37 @@ function renderCalendar() {
         });
 
         weekHtml += `</div>`;
-        calendarGrid.insertAdjacentHTML('beforeend', weekHtml);
+        htmlStr += weekHtml;
+
+        // Close Look Ahead Wrapper
+        if (inLookAhead) {
+            lookAheadCounter++;
+            if (lookAheadCounter === 4) {
+                htmlStr += `</div>`;
+                inLookAhead = false;
+            }
+        }
+
         currentLoopDate.setDate(currentLoopDate.getDate() + 7);
+    }
+    
+    // Safety close if loop finishes while inside wrapper
+    if (inLookAhead) {
+        htmlStr += `</div>`;
+    }
+
+    calendarGrid.innerHTML = htmlStr;
+
+    // Trigger auto-scroll on page load if applicable
+    if (showLookAhead) {
+        setTimeout(() => {
+            const target = document.getElementById('current-week-scroll-target');
+            if (target) {
+                // Adjusts for sticky headers
+                const y = target.getBoundingClientRect().top + window.scrollY - 150; 
+                window.scrollTo({ top: y, behavior: 'smooth' });
+            }
+        }, 100);
     }
 }
 
