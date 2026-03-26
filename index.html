@@ -66,13 +66,17 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Invited</label>
+                        <label>Invited (Daily)</label>
                         <input type="number" id="add-invited" value="0" min="0">
                     </div>
                     <div class="form-group">
-                        <label>Accepted</label>
+                        <label>Accepted (Daily)</label>
                         <input type="number" id="add-accepted" value="0" min="0">
                     </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="add-notes" rows="2" placeholder="Add custom notes here..."></textarea>
                 </div>
                 <button class="save-btn" onclick="saveNewEvent()">Save Event</button>
             </div>
@@ -84,20 +88,28 @@
                 <button class="close-btn" onclick="closeModals()">✕</button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="edit-id">
+                <input type="hidden" id="edit-old-name">
+                
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Invited</label>
-                        <input type="number" id="edit-invited" min="0">
+                        <label>Start Date</label>
+                        <input type="date" id="edit-start-date">
                     </div>
                     <div class="form-group">
-                        <label>Accepted</label>
-                        <input type="number" id="edit-accepted" min="0">
+                        <label>End Date</label>
+                        <input type="date" id="edit-end-date">
                     </div>
                 </div>
+
+                <div class="form-group">
+                    <label>Daily Stats</label>
+                    <div id="edit-daily-stats" class="edit-scroll-container">
+                        </div>
+                </div>
+
                 <div class="form-group">
                     <label>Notes</label>
-                    <textarea id="edit-notes" rows="4" placeholder="Add custom notes here..."></textarea>
+                    <textarea id="edit-notes" rows="3" placeholder="Add custom notes here..."></textarea>
                 </div>
                 <button class="save-btn" onclick="saveEditedEvent()">Save Changes</button>
             </div>
