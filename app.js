@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.0
-// Changes: Swapped the Google Apps Script endpoint for the native Glide v2 API. Added Glide authentication headers and table mutations using the exact JSON Blob schema mapping provided. Added a `projectRowIds` state tracker to map Projects to Glide $rowIDs for precise overwriting.
+// Version: V2.1
+// Changes: Fixed a bug in `fetchDatabaseData()` where the script was blindly parsing and injecting every row from the database into `eventsData`. Added a client-side filter to only ingest JSON payloads if `isGlobalView` is true or if the row's Project ID strictly matches the URL `projectNumber`.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -27,7 +27,7 @@ let lastUpdatedDate = "";
 let projectNumber = null;
 let projectTitle = null;
 let projectsList = [];
-let projectRowIds = {}; // Tracks Glide internal $rowIDs for each project
+let projectRowIds = {}; 
 let editRelatedEvents = [];
 let isGlobalView = false;
 let currentTypeFilter = "All";
@@ -111,10 +111,10 @@ async function fetchDatabaseData() {
         projectRowIds = {};
         
         rows.forEach(row => {
-            let pid = row['Name']; // pt column
-            let ptitle = row['GTdzD'] || pid; // title column
-            let rawJson = row['bunt6']; // json column
-            projectRowIds[pid] = row['$rowID']; // Store Glide's internal row ID for mutations
+            let pid = row['Name']; 
+            let ptitle = row['GTdzD'] || pid; 
+            let rawJson = row['bunt6']; 
+            projectRowIds[pid] = row['$rowID']; 
 
             if (!isGlobalView && String(pid) === String(projectNumber) && projectTitle && ptitle !== projectTitle) {
                 ptitle = projectTitle;
@@ -128,14 +128,19 @@ async function fetchDatabaseData() {
                 try {
                     let parsed = JSON.parse(rawJson);
                     let evs = Array.isArray(parsed) ? parsed : (parsed.eventsData || []);
-                    evs.forEach(ev => {
-                        ev.projectId = pid;
-                        ev.projectTitle = ptitle;
-                        eventsData.push(ev);
-                    });
+                    
+                    // CRITICAL FIX: Only push events to the local memory if we are in Global View 
+                    // OR if this row specifically matches our target projectNumber.
+                    if (isGlobalView || String(pid) === String(projectNumber)) {
+                        evs.forEach(ev => {
+                            ev.projectId = pid;
+                            ev.projectTitle = ptitle;
+                            eventsData.push(ev);
+                        });
 
-                    if (!isGlobalView && String(pid) === String(projectNumber)) {
-                        lastUpdatedDate = parsed.lastUpdated || "Recent";
+                        if (!isGlobalView && String(pid) === String(projectNumber)) {
+                            lastUpdatedDate = parsed.lastUpdated || "Recent";
+                        }
                     }
                 } catch(e) { console.error('JSON Parse Error for project', pid); }
             }
@@ -246,7 +251,6 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
         if (response.ok) {
             const result = await response.json();
             
-            // If it was an add-row mutation, capture the newly generated Row ID
             if (!existingRowId && result[0]?.rowIDs?.length > 0) {
                 projectRowIds[String(targetId)] = result[0].rowIDs[0];
             }
