@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.11 */
-/* Changes: Converted .global-add-btn to a perfect square to hold the new SVG icon. Changed .dimmed-empty so that it adopts the main page background color while retaining opacity=1 to keep the border visible. Forced .week-container to allocate a minmax(65px) row for empty event bodies so empty weeks don't collapse horizontally. */
+/* Version: V1.12 */
+/* Changes: Upgraded .sticky-top-section with a glassmorphism/gradient effect, borders, and shadows to look premium. Shrunk .title-group font sizes and added .range-label styling. Styled the new .header-action-btn (Collapse toggle). Added .collapsed-view overrides to dynamically hide event bodies and shrink the grid rows. */
 :root {
     --bg-color: #1F1F1F;
     --surface-color: #1E1E2F;
@@ -21,34 +21,70 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 
 .dashboard-container { width: 100%; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px; }
 
-/* Unified Sticky Header */
+/* Enhanced Sticky Header */
 .sticky-top-section {
     position: sticky;
     top: 0;
     z-index: 100;
-    background-color: var(--bg-color);
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-color);
+    background: linear-gradient(180deg, var(--surface-color) 0%, rgba(30,30,47,0.95) 100%);
+    backdrop-filter: blur(8px);
+    padding: 10px 15px 5px 15px;
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    margin: 0 -5px 10px -5px; 
 }
 
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 0 5px 0;
+    padding: 5px 0 10px 0;
     flex-wrap: wrap;
     gap: 15px;
 }
 
+/* Updated Title Group Formatting */
 .header-left { display: flex; align-items: center; }
-.title-group h1 { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); }
+.title-group { display: flex; flex-direction: column; justify-content: center; }
+.range-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+.title-group h1 { font-size: 0.95rem; font-weight: 500; color: var(--text-primary); }
+
 .header-right { display: flex; align-items: center; gap: 10px; }
-.status-group { text-align: right; display: flex; flex-direction: column; justify-content: center; }
+.status-group { text-align: right; display: flex; flex-direction: column; justify-content: center; margin-right: 5px; }
 
 .status { font-size: 0.85rem; font-weight: bold; }
 .status.success { color: var(--accepted-color); }
 .status.error { color: #EF476F; }
 .last-updated { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
+
+/* Collapse Events Button */
+.header-action-btn {
+    background-color: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.header-action-btn:hover {
+    border-color: var(--text-secondary);
+    background-color: rgba(255,255,255,0.05);
+}
 
 /* Global Add Button */
 .global-add-btn {
@@ -77,7 +113,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background-color: var(--surface-color);
+    background-color: var(--bg-color);
     color: var(--text-primary);
     padding: 8px 12px;
     border-radius: 8px;
@@ -85,7 +121,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     font-weight: 600;
     font-size: 0.85rem;
     transition: all 0.2s;
-    border: 2px dashed var(--border-color);
+    border: 1px solid var(--border-color);
     min-width: auto;
     height: 38px;
 }
@@ -97,6 +133,11 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 .grid-headers { display: grid; grid-template-columns: repeat(var(--col-count, 6), 1fr); gap: 5px; padding-top: 10px; }
 .day-label { text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; padding: 5px 0; }
 .calendar-grid { display: flex; flex-direction: column; gap: 10px; }
+
+/* Collapsed View Overrides */
+.calendar-grid.collapsed-view .week-container { grid-template-rows: min-content !important; gap: 5px; }
+.calendar-grid.collapsed-view .spanning-event { display: none !important; }
+.calendar-grid.collapsed-view .day-bg { grid-row: 1 !important; }
 
 /* 3-Week Look Ahead Highlight Wrapper */
 .look-ahead-wrapper {
@@ -126,7 +167,6 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 .week-container {
     display: grid;
     grid-template-columns: repeat(var(--col-count, 6), 1fr);
-    /* Guarantees that even empty weeks allocate at least 65px for the empty "body" row */
     grid-template-rows: min-content minmax(65px, auto); 
     grid-auto-rows: min-content;
     gap: 5px;
@@ -135,12 +175,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 
 /* Day Column Backgrounds */
 .day-bg { background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: 6px; z-index: 0; }
-
-/* Make empty cells match the background strictly instead of blurring */
-.day-bg.dimmed-empty { 
-    background-color: var(--bg-color); 
-    opacity: 1; 
-}
+.day-bg.dimmed-empty { background-color: var(--bg-color); opacity: 1; }
 
 /* Today Highlight Override */
 .today-highlight {
@@ -218,5 +253,5 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     .header { flex-direction: column; align-items: stretch; text-align: center; }
     .header-left, .header-right { flex-direction: column; justify-content: center; }
     .status-group { text-align: center; }
-    .upload-module { min-width: 100%; }
+    .upload-module, .header-action-btn { min-width: 100%; justify-content: center; }
 }
