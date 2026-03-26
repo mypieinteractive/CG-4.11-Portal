@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.13 */
-/* Changes: Styled standard drop-down selects to match system UI styling. Added .type-icon for the custom card emojis. */
+/* Version: V1.14 */
+/* Changes: Removed the `.stat-divider` class. Shrunk the `.event-stats` and `.header-totals` gaps to 2px to bring the circles closer. Added `.imported-note` styling for locked spreadsheet events. */
 :root {
     --bg-color: #1F1F1F;
     --surface-color: #1E1E2F;
@@ -206,12 +206,11 @@ select.header-action-btn option {
 .event-name { font-size: calc(0.8rem - 2px); font-weight: normal; margin-bottom: 6px; white-space: normal; word-wrap: break-word; line-height: 1.3; padding-right: 15px;}
 .note-icon { position: absolute; top: 6px; right: 6px; color: #FCA311; font-size: 0.9rem; }
 
-/* Circular Stats & Type Icons */
-.event-stats, .header-totals { display: flex; flex-direction: row; justify-content: flex-end; align-items: center; gap: 4px; font-size: 0.75rem; font-weight: 600; }
-.stat-circle { display: inline-flex; justify-content: center; align-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid; font-size: 0.7rem; }
+/* Circular Stats & Type Icons - Modified Gap */
+.event-stats, .header-totals { display: flex; flex-direction: row; justify-content: flex-end; align-items: center; gap: 2px; font-size: 0.75rem; font-weight: 600; }
+.stat-circle { display: inline-flex; justify-content: center; align-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid; font-size: 0.7rem; cursor: help;}
 .accepted-circle { border-color: var(--accepted-color); color: var(--accepted-color); }
 .invited-circle { border-color: var(--invited-color); color: var(--invited-color); }
-.stat-divider { color: var(--text-secondary); font-weight: normal; font-size: 0.8rem; margin: 0 2px; }
 
 .type-icon { font-size: 1.1rem; filter: grayscale(0.2); }
 
@@ -235,6 +234,19 @@ select.header-action-btn option {
 
 .save-btn { background: var(--accent-color); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-top: 5px;}
 .save-btn:hover { background: var(--accent-hover); }
+
+/* Imported Note */
+.imported-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
 
 /* Dynamic Daily Stat Editors */
 .edit-scroll-container { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; }
