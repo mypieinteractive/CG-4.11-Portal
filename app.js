@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.18
-// Changes: Rewrote fetchDatabaseData to properly decode the new array schema and extract `projectId` and `projectTitle`. Engineered `saveToDatabase` to filter isolated events so updates to single projects do not overwrite or destroy other projects. Added `#project-filter` and tied it to the renderer. Modified upload interception logic to throw the `#global-upload-modal` if active. Included Title assignment upon ID match in `fetchDatabaseData`.
+// Version: V1.20
+// Changes: Adjusted Look-Ahead wrapper logic to exclude the current week and only encase the next 3 weeks. Injected an isolated `#current-week-scroll-target` above the current week. Added `.calendar-bottom-padding` spacer to ensure Auto-Scroll is always possible on collapse. Added JS restructuring sequence for Global View header positioning.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -40,6 +40,13 @@ function init() {
         if (projectNumber.toLowerCase() === 'global') {
             isGlobalView = true;
             document.querySelector('.range-label').style.display = 'none';
+            
+            // Restructure Global Header
+            const header = document.querySelector('.header');
+            const headerLeft = document.querySelector('.header-left');
+            const statusGroup = document.querySelector('.status-group');
+            header.classList.add('global-header-layout');
+            headerLeft.appendChild(statusGroup);
         }
         fetchDatabaseData();
     } else {
@@ -52,7 +59,17 @@ function init() {
 function extractProjectNumber() {
     const params = new URLSearchParams(window.location.search);
     projectNumber = params.get('project');
-    projectTitle = params.get('title') || projectNumber;
+    
+    let extractedTitle = params.get('title');
+
+    if (extractedTitle && window.location.hash) {
+        extractedTitle += window.location.hash;
+        try { extractedTitle = decodeURIComponent(extractedTitle); } catch(e) {}
+    } else if (extractedTitle) {
+        try { extractedTitle = decodeURIComponent(extractedTitle); } catch(e) {}
+    }
+
+    projectTitle = extractedTitle || projectNumber;
 }
 
 function setStatus(msg, type = '') {
@@ -75,7 +92,6 @@ async function fetchDatabaseData() {
                 let pid = proj.projectId;
                 let ptitle = proj.projectTitle;
 
-                // URL Title override logic: Update memory if ID matches but title is different
                 if (!isGlobalView && String(pid) === String(projectNumber) && projectTitle && ptitle !== projectTitle) {
                     ptitle = projectTitle;
                 }
@@ -84,7 +100,6 @@ async function fetchDatabaseData() {
                     projectsList.push({ id: pid, title: ptitle });
                 }
 
-                // Standardize schema
                 let evs = Array.isArray(proj.eventsData) ? proj.eventsData : (proj.eventsData.eventsData || []);
                 evs.forEach(ev => {
                     ev.projectId = pid;
@@ -93,7 +108,6 @@ async function fetchDatabaseData() {
                 });
             });
 
-            // Ensure current specific project is in dropdowns even if blank
             if (!isGlobalView && !projectsList.find(p => p.id === projectNumber)) {
                 projectsList.push({ id: projectNumber, title: projectTitle });
             }
@@ -103,7 +117,6 @@ async function fetchDatabaseData() {
             if(eventsData.length > 0) {
                 eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
                 setStatus('Data loaded.', 'success');
-                // Pick a recent timestamp assuming they are roughly synced
                 lastUpdatedDate = result.data[0]?.eventsData?.lastUpdated || "Recent";
                 lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
             } else {
@@ -111,7 +124,6 @@ async function fetchDatabaseData() {
             }
         } else {
             setStatus('No data found for this project.', '');
-            // Setup blank state
             if (!isGlobalView) {
                 projectsList.push({ id: projectNumber, title: projectTitle });
             }
@@ -150,10 +162,8 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
     const now = new Date();
     lastUpdatedDate = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear().toString().slice(-2)}`;
     
-    // Extract strictly the events for this specific project so we don't overwrite the whole DB
     const projectEvents = eventsData.filter(e => e.projectId === String(targetId));
     
-    // Strip IDs from individual events to save space in the JSON payload
     const cleanEvents = projectEvents.map(e => {
         const { projectId, projectTitle, ...rest } = e;
         return rest;
@@ -235,13 +245,16 @@ function setupEventListeners() {
                 this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> Collapse Events`;
             }
 
-            const target = document.getElementById('current-week-scroll-target');
-            const stickyHeader = document.querySelector('.sticky-top-section');
-            if (target && stickyHeader) {
-                const headerHeight = stickyHeader.offsetHeight;
-                const y = target.getBoundingClientRect().top + window.scrollY - headerHeight - 20; 
-                window.scrollTo({ top: y, behavior: 'smooth' });
-            }
+            // Force dynamic scroll repositioning even if collapsed calendar is short
+            setTimeout(() => {
+                const target = document.getElementById('current-week-scroll-target');
+                const stickyHeader = document.querySelector('.sticky-top-section');
+                if (target && stickyHeader) {
+                    const headerHeight = stickyHeader.offsetHeight;
+                    const y = target.getBoundingClientRect().top + window.scrollY - headerHeight - 10; 
+                    window.scrollTo({ top: y, behavior: 'smooth' });
+                }
+            }, 50);
         });
     }
 
@@ -682,6 +695,9 @@ function renderCalendar() {
     let todayStr = formatDateObj(today);
     let startOfTodayWeek = getStartOfWeek(today);
     
+    let startOfNextWeek = new Date(startOfTodayWeek);
+    startOfNextWeek.setDate(startOfNextWeek.getDate() + 7);
+    
     let startOfGrid = getStartOfWeek(minDate);
     let endOfGridWeek = getStartOfWeek(maxDate);
     endOfGridWeek.setDate(endOfGridWeek.getDate() + 5); 
@@ -695,8 +711,8 @@ function renderCalendar() {
         if (startOfTodayWeek < startOfGrid) {
             startOfGrid = new Date(startOfTodayWeek);
         }
-        let minLookAheadEnd = new Date(startOfTodayWeek);
-        minLookAheadEnd.setDate(minLookAheadEnd.getDate() + 27); 
+        let minLookAheadEnd = new Date(startOfNextWeek);
+        minLookAheadEnd.setDate(minLookAheadEnd.getDate() + 20); // Force 3 extra weeks 
         if (endOfGridWeek < minLookAheadEnd) {
             endOfGridWeek = new Date(minLookAheadEnd);
         }
@@ -713,7 +729,7 @@ function renderCalendar() {
     let inLookAhead = false;
     let lookAheadCounter = 0;
 
-    while (currentLoopDate <= endOfGridWeek || (inLookAhead && lookAheadCounter < 4)) {
+    while (currentLoopDate <= endOfGridWeek || (inLookAhead && lookAheadCounter < 3)) {
         let weekDates = [];
         for(let i = 0; i < 6; i++) {
             let d = new Date(currentLoopDate);
@@ -721,9 +737,15 @@ function renderCalendar() {
             weekDates.push(formatDateObj(d));
         }
 
+        // Anchor injection point for current week scroll target
         if (showLookAhead && currentLoopDate.getTime() === startOfTodayWeek.getTime()) {
+            htmlStr += `<div id="current-week-scroll-target"></div>`;
+        }
+
+        // Trigger Wrapper for the NEXT 3 weeks
+        if (showLookAhead && currentLoopDate.getTime() === startOfNextWeek.getTime()) {
             htmlStr += `
-                <div class="look-ahead-wrapper" id="current-week-scroll-target">
+                <div class="look-ahead-wrapper">
                     <div class="look-ahead-title">3-Week Look Ahead</div>
             `;
             inLookAhead = true;
@@ -732,7 +754,6 @@ function renderCalendar() {
 
         let weekEvents = displayEvents.filter(ev => weekDates.includes(ev.date));
         
-        // Group by Name AND Project ID to support isolating same-named events across different projects in Global
         let uniqueGroupings = [...new Set(weekEvents.map(e => e.name + '|' + e.projectId))];
         
         let eventBlocks = [];
@@ -863,7 +884,7 @@ function renderCalendar() {
 
         if (inLookAhead) {
             lookAheadCounter++;
-            if (lookAheadCounter === 4) {
+            if (lookAheadCounter === 3) {
                 htmlStr += `</div>`;
                 inLookAhead = false;
             }
@@ -873,17 +894,18 @@ function renderCalendar() {
     }
     
     if (inLookAhead) htmlStr += `</div>`;
-
+    
+    // Add bottom padding element so auto-scroll can always reach the top
+    htmlStr += `<div class="calendar-bottom-padding"></div>`;
     calendarGrid.innerHTML = htmlStr;
 
-    // Load-based Auto Scroll
     if (showLookAhead && !calendarGrid.classList.contains('collapsed-view')) {
         setTimeout(() => {
             const target = document.getElementById('current-week-scroll-target');
             const stickyHeader = document.querySelector('.sticky-top-section');
             if (target && stickyHeader) {
                 const headerHeight = stickyHeader.offsetHeight;
-                const y = target.getBoundingClientRect().top + window.scrollY - headerHeight - 20; 
+                const y = target.getBoundingClientRect().top + window.scrollY - headerHeight - 10; 
                 window.scrollTo({ top: y, behavior: 'smooth' });
             }
         }, 100);
