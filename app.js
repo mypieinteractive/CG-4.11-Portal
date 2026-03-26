@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.12
-// Changes: Removed date arguments from openAddModal. Modified renderCalendar to exclude individual footer [+] buttons. Updated saveNewEvent to elegantly handle injecting data to a completely blank JSON timeline.
+// Version: V1.13
+// Changes: Ensured `maxSlots` enforces a minimum value of 1 so that completely empty weeks will still output an empty body row to sync with the CSS minmax(65px) row constraints.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -504,10 +504,11 @@ function renderCalendar() {
             }
         });
         
-        let maxSlots = slotsOccupied.length;
+        // FIX: Ensure maxSlots is always at least 1, so the empty event row body is always rendered 
+        let maxSlots = Math.max(slotsOccupied.length, 1);
         let weekHtml = `<div class="week-container">`;
 
-        // Render Backgrounds and Headers (Removed Footers)
+        // Render Backgrounds and Headers
         for (let i = 0; i < 6; i++) {
             if (!hasMondayEvents && i === 0) continue;
             let gridCol = hasMondayEvents ? i + 1 : i; 
@@ -522,7 +523,7 @@ function renderCalendar() {
                 acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
             }, { invited: 0, accepted: 0 });
 
-            // Adjusted span to match maxSlots + 1 since footer row is removed
+            // Using maxSlots + 1 guarantees it always covers the header and the empty body
             weekHtml += `<div class="${bgClasses}" style="grid-column: ${gridCol}; grid-row: 1 / span ${maxSlots + 1};"></div>`;
             
             weekHtml += `
