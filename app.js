@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.17
-// Changes: Implemented the auto-scroll reset upon Collapse/Expand. Stripped out the stat dividers. Added dynamic label/input manipulation based on Event Type selection. Tagged spreadsheet parsed events with an `imported` flag to lock their Edit Modal dropdown and enforce 'Work Event'.
+// Version: V1.18
+// Changes: Rewrote fetchDatabaseData to properly decode the new array schema and extract `projectId` and `projectTitle`. Engineered `saveToDatabase` to filter isolated events so updates to single projects do not overwrite or destroy other projects. Added `#project-filter` and tied it to the renderer. Modified upload interception logic to throw the `#global-upload-modal` if active. Included Title assignment upon ID match in `fetchDatabaseData`.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -17,14 +17,19 @@ const calendarGrid = document.getElementById('calendar-grid');
 const modalOverlay = document.getElementById('modal-overlay');
 const addModal = document.getElementById('add-modal');
 const editModal = document.getElementById('edit-modal');
+const uploadModal = document.getElementById('global-upload-modal');
 
 // State
 let eventsData = [];
 let lastUpdatedDate = "";
 let projectNumber = null;
+let projectTitle = null;
+let projectsList = [];
 let editRelatedEvents = [];
 let isGlobalView = false;
-let currentFilter = "All";
+let currentTypeFilter = "All";
+let currentProjectFilter = "All";
+let pendingUploadFile = null;
 
 // Initialize
 function init() {
@@ -47,6 +52,7 @@ function init() {
 function extractProjectNumber() {
     const params = new URLSearchParams(window.location.search);
     projectNumber = params.get('project');
+    projectTitle = params.get('title') || projectNumber;
 }
 
 function setStatus(msg, type = '') {
@@ -62,23 +68,54 @@ async function fetchDatabaseData() {
         const result = await response.json();
         
         if (result.status === 'success' && result.data) {
-            if (Array.isArray(result.data)) {
-                eventsData = result.data;
-                lastUpdatedDate = "Unknown";
-            } else {
-                eventsData = result.data.eventsData || [];
-                lastUpdatedDate = result.data.lastUpdated || "Unknown";
+            eventsData = [];
+            projectsList = [];
+            
+            result.data.forEach(proj => {
+                let pid = proj.projectId;
+                let ptitle = proj.projectTitle;
+
+                // URL Title override logic: Update memory if ID matches but title is different
+                if (!isGlobalView && String(pid) === String(projectNumber) && projectTitle && ptitle !== projectTitle) {
+                    ptitle = projectTitle;
+                }
+
+                if (!projectsList.find(p => p.id === pid)) {
+                    projectsList.push({ id: pid, title: ptitle });
+                }
+
+                // Standardize schema
+                let evs = Array.isArray(proj.eventsData) ? proj.eventsData : (proj.eventsData.eventsData || []);
+                evs.forEach(ev => {
+                    ev.projectId = pid;
+                    ev.projectTitle = ptitle;
+                    eventsData.push(ev);
+                });
+            });
+
+            // Ensure current specific project is in dropdowns even if blank
+            if (!isGlobalView && !projectsList.find(p => p.id === projectNumber)) {
+                projectsList.push({ id: projectNumber, title: projectTitle });
             }
+
+            populateProjectDropdowns();
 
             if(eventsData.length > 0) {
                 eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
                 setStatus('Data loaded.', 'success');
+                // Pick a recent timestamp assuming they are roughly synced
+                lastUpdatedDate = result.data[0]?.eventsData?.lastUpdated || "Recent";
                 lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
             } else {
                 setStatus('No events found. Upload a file.', '');
             }
         } else {
             setStatus('No data found for this project.', '');
+            // Setup blank state
+            if (!isGlobalView) {
+                projectsList.push({ id: projectNumber, title: projectTitle });
+            }
+            populateProjectDropdowns();
         }
         renderCalendar();
     } catch (error) {
@@ -88,26 +125,55 @@ async function fetchDatabaseData() {
     }
 }
 
-async function saveToDatabase() {
-    if (!projectNumber) return;
-    if (isGlobalView) return alert("Cannot save changes while in Global 'All Projects' view.");
+function populateProjectDropdowns() {
+    const filter = document.getElementById('project-filter');
+    const addSel = document.getElementById('add-project');
+    const upSel = document.getElementById('upload-project-select');
+
+    let opts = '';
+    projectsList.forEach(p => {
+        opts += `<option value="${p.id}">${p.title}</option>`;
+    });
+
+    if (isGlobalView) {
+        filter.style.display = 'flex';
+        filter.innerHTML = `<option value="All">All Projects</option>` + opts;
+        addSel.innerHTML = opts;
+        if(upSel) upSel.innerHTML = opts;
+    }
+}
+
+async function saveToDatabase(targetId = projectNumber, targetTitle = projectTitle) {
+    if (!targetId || targetId.toLowerCase() === 'global') return;
     
     setStatus('Saving to database...');
-    
     const now = new Date();
     lastUpdatedDate = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear().toString().slice(-2)}`;
     
+    // Extract strictly the events for this specific project so we don't overwrite the whole DB
+    const projectEvents = eventsData.filter(e => e.projectId === String(targetId));
+    
+    // Strip IDs from individual events to save space in the JSON payload
+    const cleanEvents = projectEvents.map(e => {
+        const { projectId, projectTitle, ...rest } = e;
+        return rest;
+    });
+
     const payload = {
         lastUpdated: lastUpdatedDate,
-        totalEvents: eventsData.length,
-        eventsData: eventsData
+        totalEvents: cleanEvents.length,
+        eventsData: cleanEvents
     };
 
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ projectNumber: projectNumber, eventsData: payload })
+            body: JSON.stringify({ 
+                projectNumber: targetId, 
+                projectTitle: targetTitle,
+                eventsData: payload 
+            })
         });
         
         const result = await response.json();
@@ -125,15 +191,37 @@ async function saveToDatabase() {
 
 // Event Listeners
 function setupEventListeners() {
-    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('click', () => {
+        if (isGlobalView) {
+            pendingUploadFile = null;
+            openGlobalUploadModal();
+        } else {
+            fileInput.click();
+        }
+    });
+
     dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    
     dropzone.addEventListener('drop', (e) => {
         e.preventDefault(); dropzone.classList.remove('dragover');
-        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        if (e.dataTransfer.files.length) {
+            if (isGlobalView) {
+                pendingUploadFile = e.dataTransfer.files[0];
+                openGlobalUploadModal();
+            } else {
+                handleFile(e.dataTransfer.files[0], projectNumber, projectTitle);
+            }
+        }
     });
+
     fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length) handleFile(e.target.files[0]);
+        if (e.target.files.length) {
+            let pId = isGlobalView ? document.getElementById('upload-project-select').value : projectNumber;
+            let pTitle = projectsList.find(p => String(p.id) === String(pId))?.title || pId;
+            handleFile(e.target.files[0], pId, pTitle);
+            fileInput.value = ''; 
+        }
     });
 
     const collapseBtn = document.getElementById('collapse-btn');
@@ -147,7 +235,6 @@ function setupEventListeners() {
                 this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> Collapse Events`;
             }
 
-            // Reposition scroll back to today after toggling
             const target = document.getElementById('current-week-scroll-target');
             const stickyHeader = document.querySelector('.sticky-top-section');
             if (target && stickyHeader) {
@@ -161,12 +248,19 @@ function setupEventListeners() {
     const typeFilter = document.getElementById('event-type-filter');
     if (typeFilter) {
         typeFilter.addEventListener('change', function() {
-            currentFilter = this.value;
+            currentTypeFilter = this.value;
             renderCalendar();
         });
     }
 
-    // Dynamic Type Adapters for Add Modal
+    const projFilter = document.getElementById('project-filter');
+    if (projFilter) {
+        projFilter.addEventListener('change', function() {
+            currentProjectFilter = this.value;
+            renderCalendar();
+        });
+    }
+
     document.getElementById('add-type').addEventListener('change', function() {
         const val = this.value;
         const startLabel = document.getElementById('add-start-date-label');
@@ -192,7 +286,6 @@ function setupEventListeners() {
         }
     });
 
-    // Dynamic Type Adapters for Edit Modal
     document.getElementById('edit-type').addEventListener('change', function() {
         const val = this.value;
         const startLabel = document.getElementById('edit-start-date-label');
@@ -224,11 +317,29 @@ function setupEventListeners() {
     });
 }
 
-// File Processing
-function handleFile(file) {
-    if (!projectNumber) return alert("Please add a project number to the URL.");
-    if (isGlobalView) return alert("Cannot upload files while in Global view. Please switch to a specific project.");
+function openGlobalUploadModal() {
+    if (projectsList.length === 0) return alert("No existing projects found to upload to.");
+    modalOverlay.classList.remove('hidden');
+    uploadModal.classList.remove('hidden');
+    addModal.classList.add('hidden');
+    editModal.classList.add('hidden');
+}
 
+window.confirmGlobalUpload = function() {
+    if (pendingUploadFile) {
+        let pId = document.getElementById('upload-project-select').value;
+        let pTitle = projectsList.find(p => String(p.id) === String(pId))?.title || pId;
+        handleFile(pendingUploadFile, pId, pTitle);
+        closeModals();
+        pendingUploadFile = null;
+    } else {
+        fileInput.click();
+        closeModals();
+    }
+}
+
+// File Processing
+function handleFile(file, pId, pTitle) {
     setStatus('Parsing file...');
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -236,14 +347,14 @@ function handleFile(file) {
         const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        processData(json);
+        processData(json, String(pId), pTitle);
         renderCalendar();
-        saveToDatabase();
+        saveToDatabase(pId, pTitle);
     };
     reader.readAsArrayBuffer(file);
 }
 
-function processData(data) {
+function processData(data, pId, pTitle) {
     for (let i = 1; i < data.length; i++) {
         const row = data[i];
         if (!row || row.length === 0) continue;
@@ -256,7 +367,6 @@ function processData(data) {
         if (!eventName || !dateVal) continue;
 
         let dateStr = "";
-        
         if (dateVal instanceof Date) {
             const yyyy = dateVal.getUTCFullYear();
             const mm = String(dateVal.getUTCMonth() + 1).padStart(2, '0');
@@ -271,18 +381,20 @@ function processData(data) {
             }
         }
 
-        const existingIndex = eventsData.findIndex(ev => ev.name === eventName && ev.date === dateStr);
+        const existingIndex = eventsData.findIndex(ev => ev.name === eventName && ev.date === dateStr && ev.projectId === pId);
         if (existingIndex > -1) {
             eventsData[existingIndex].invited = invited;
             eventsData[existingIndex].accepted = accepted;
-            eventsData[existingIndex].type = 'Work Event'; // Force spreadsheet events to Work Event
+            eventsData[existingIndex].type = 'Work Event'; 
             eventsData[existingIndex].imported = true;
         } else {
             eventsData.push({
                 id: generateId(), name: eventName, date: dateStr,
                 invited: invited, accepted: accepted, notes: "",
                 type: 'Work Event',
-                imported: true
+                imported: true,
+                projectId: pId,
+                projectTitle: pTitle
             });
         }
     }
@@ -292,11 +404,15 @@ function processData(data) {
 // ADD Modal Logic
 function openAddModal() {
     if (!projectNumber) return alert("Please add a ?project=XYZ variable to your URL to begin working.");
-    if (isGlobalView) return alert("Cannot add events while in Global 'All Projects' view.");
+
+    if (isGlobalView) {
+        if (projectsList.length === 0) return alert("No existing projects found to add events to.");
+        document.getElementById('add-project-group').style.display = 'flex';
+    }
 
     const typeSelect = document.getElementById('add-type');
     typeSelect.value = 'Work Event';
-    typeSelect.dispatchEvent(new Event('change')); // Force reset
+    typeSelect.dispatchEvent(new Event('change')); 
 
     document.getElementById('add-start-date').value = '';
     document.getElementById('add-end-date').value = '';
@@ -308,6 +424,7 @@ function openAddModal() {
     modalOverlay.classList.remove('hidden');
     addModal.classList.remove('hidden');
     editModal.classList.add('hidden');
+    if(uploadModal) uploadModal.classList.add('hidden');
 }
 
 function saveNewEvent() {
@@ -318,6 +435,13 @@ function saveNewEvent() {
     const eventType = document.getElementById('add-type').value;
     
     if (!name || !startVal) return alert("Event Name/Description and Date are required.");
+
+    let pId = projectNumber;
+    let pTitle = projectTitle;
+    if (isGlobalView) {
+        pId = document.getElementById('add-project').value;
+        pTitle = projectsList.find(p => String(p.id) === String(pId))?.title || pId;
+    }
 
     let start = new Date(startVal + 'T00:00:00');
     let end = endVal ? new Date(endVal + 'T00:00:00') : new Date(start);
@@ -340,24 +464,24 @@ function saveNewEvent() {
                 accepted: accepted, 
                 notes: notes,
                 type: eventType,
-                imported: false
+                imported: false,
+                projectId: String(pId),
+                projectTitle: pTitle
             });
         }
         current.setDate(current.getDate() + 1);
     }
 
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
-    closeModals(); renderCalendar(); saveToDatabase();
+    closeModals(); renderCalendar(); saveToDatabase(pId, pTitle);
 }
 
 // EDIT Modal Logic
 function openEditModal(eventId) {
-    if (isGlobalView) return alert("Cannot edit events from the Global view.");
-
     const ev = eventsData.find(e => e.id === eventId);
     if (!ev) return;
 
-    document.getElementById('edit-title').innerText = ev.name;
+    document.getElementById('edit-title').innerText = ev.name + (isGlobalView ? ` (${ev.projectTitle})` : '');
     document.getElementById('edit-old-name').value = ev.name;
     document.getElementById('edit-notes').value = ev.notes || '';
     
@@ -375,9 +499,9 @@ function openEditModal(eventId) {
         typeSelect.value = ev.type || 'Work Event';
     }
 
-    typeSelect.dispatchEvent(new Event('change')); // Force dynamic labels to update
+    typeSelect.dispatchEvent(new Event('change')); 
     
-    editRelatedEvents = eventsData.filter(e => e.name === ev.name).sort((a,b) => new Date(a.date) - new Date(b.date));
+    editRelatedEvents = eventsData.filter(e => e.name === ev.name && e.projectId === ev.projectId).sort((a,b) => new Date(a.date) - new Date(b.date));
     
     let startStr = editRelatedEvents[0].date;
     let endStr = editRelatedEvents[editRelatedEvents.length - 1].date;
@@ -390,6 +514,7 @@ function openEditModal(eventId) {
     modalOverlay.classList.remove('hidden');
     editModal.classList.remove('hidden');
     addModal.classList.add('hidden');
+    if(uploadModal) uploadModal.classList.add('hidden');
 }
 
 function renderEditStats(startStr, endStr) {
@@ -450,10 +575,12 @@ function saveEditedEvent() {
     const newNotes = document.getElementById('edit-notes').value.trim();
     const eventType = document.getElementById('edit-type').value;
     const isImported = editRelatedEvents[0] ? editRelatedEvents[0].imported : false;
+    const pId = editRelatedEvents[0].projectId;
+    const pTitle = editRelatedEvents[0].projectTitle;
     
     updateRelatedEventsFromDOM(); 
     
-    eventsData = eventsData.filter(e => e.name !== oldName);
+    eventsData = eventsData.filter(e => !(e.name === oldName && e.projectId === pId));
     
     const startStr = document.getElementById('edit-start-date').value;
     const endStr = document.getElementById('edit-end-date').value;
@@ -480,14 +607,16 @@ function saveEditedEvent() {
                 accepted: (isWorkEvent && stat) ? stat.accepted : 0,
                 notes: newNotes,
                 type: eventType,
-                imported: isImported
+                imported: isImported,
+                projectId: pId,
+                projectTitle: pTitle
             });
         }
         current.setDate(current.getDate() + 1);
     }
     
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
-    closeModals(); renderCalendar(); saveToDatabase();
+    closeModals(); renderCalendar(); saveToDatabase(pId, pTitle);
 }
 
 function closeModals() {
@@ -520,7 +649,13 @@ function renderCalendar() {
         projectDateRange.innerText = "All Projects";
     }
 
-    let displayEvents = currentFilter === "All" ? eventsData : eventsData.filter(e => (e.type || 'Work Event') === currentFilter);
+    let displayEvents = eventsData;
+    if (currentTypeFilter !== "All") {
+        displayEvents = displayEvents.filter(e => (e.type || 'Work Event') === currentTypeFilter);
+    }
+    if (currentProjectFilter !== "All") {
+        displayEvents = displayEvents.filter(e => e.projectId === currentProjectFilter);
+    }
 
     if (displayEvents.length === 0) { 
         if (!isGlobalView) projectDateRange.innerText = "No events scheduled."; 
@@ -596,26 +731,28 @@ function renderCalendar() {
         }
 
         let weekEvents = displayEvents.filter(ev => weekDates.includes(ev.date));
-        let uniqueNames = [...new Set(weekEvents.map(e => e.name))];
+        
+        // Group by Name AND Project ID to support isolating same-named events across different projects in Global
+        let uniqueGroupings = [...new Set(weekEvents.map(e => e.name + '|' + e.projectId))];
         
         let eventBlocks = [];
-        uniqueNames.forEach(name => {
+        uniqueGroupings.forEach(groupKey => {
             let startCol = -1;
             let segments = [];
             for (let i = 0; i < 6; i++) {
-                let ev = weekEvents.find(e => e.name === name && e.date === weekDates[i]);
+                let ev = weekEvents.find(e => (e.name + '|' + e.projectId) === groupKey && e.date === weekDates[i]);
                 if (ev) {
                     if (startCol === -1) startCol = i;
                     segments.push(ev);
                 } else {
                     if (startCol !== -1) {
-                        eventBlocks.push({ name, startCol, span: segments.length, segments });
+                        eventBlocks.push({ groupKey, startCol, span: segments.length, segments });
                         startCol = -1;
                         segments = [];
                     }
                 }
             }
-            if (startCol !== -1) eventBlocks.push({ name, startCol, span: segments.length, segments });
+            if (startCol !== -1) eventBlocks.push({ groupKey, startCol, span: segments.length, segments });
         });
 
         eventBlocks.sort((a, b) => {
@@ -671,7 +808,7 @@ function renderCalendar() {
 
         // Render Event Blocks
         eventBlocks.forEach(block => {
-            let colorIdx = uniqueNames.indexOf(block.name);
+            let colorIdx = uniqueGroupings.indexOf(block.groupKey);
             let styleColor = palette[colorIdx % palette.length];
             let isMulti = block.span > 1;
             let gridCol = hasMondayEvents ? block.startCol + 1 : block.startCol;
@@ -699,10 +836,12 @@ function renderCalendar() {
                     `;
                 }
                 
+                let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
+
                 return `
                     <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
                         ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
-                        <div class="event-name">${ev.name}</div>
+                        <div class="event-name">${ev.name}${globalTag}</div>
                         <div class="event-stats">
                             ${statsDisplayHtml}
                         </div>
@@ -737,7 +876,8 @@ function renderCalendar() {
 
     calendarGrid.innerHTML = htmlStr;
 
-    if (showLookAhead) {
+    // Load-based Auto Scroll
+    if (showLookAhead && !calendarGrid.classList.contains('collapsed-view')) {
         setTimeout(() => {
             const target = document.getElementById('current-week-scroll-target');
             const stickyHeader = document.querySelector('.sticky-top-section');
