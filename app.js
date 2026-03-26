@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.14
-// Changes: Updated the auto-scroll logic at the end of renderCalendar() to dynamically calculate the height of the .sticky-top-section, ensuring the "3-Week Look Ahead" target scrolls perfectly snug under the header regardless of screen size.
+// Version: V1.15
+// Changes: Hooked up the #collapse-btn event listener to toggle the .collapsed-view class on the calendarGrid and dynamically swap the inline SVG and button text between Collapse/Expand modes.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -128,6 +128,21 @@ function setupEventListeners() {
         if (e.target.files.length) handleFile(e.target.files[0]);
     });
 
+    // Collapse Events Toggle Logic
+    const collapseBtn = document.getElementById('collapse-btn');
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', function() {
+            calendarGrid.classList.toggle('collapsed-view');
+            const isCollapsed = calendarGrid.classList.contains('collapsed-view');
+            if (isCollapsed) {
+                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Expand Events`;
+            } else {
+                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> Collapse Events`;
+            }
+        });
+    }
+
+    // Modal Realtime Date Range Updaters
     document.getElementById('edit-start-date').addEventListener('change', function() {
         updateRelatedEventsFromDOM();
         renderEditStats(this.value, document.getElementById('edit-end-date').value);
@@ -592,7 +607,6 @@ function renderCalendar() {
             const stickyHeader = document.querySelector('.sticky-top-section');
             if (target && stickyHeader) {
                 const headerHeight = stickyHeader.offsetHeight;
-                // Get bounds, subtract header height, and apply a 20px visual margin above the 3-week text
                 const y = target.getBoundingClientRect().top + window.scrollY - headerHeight - 20; 
                 window.scrollTo({ top: y, behavior: 'smooth' });
             }
