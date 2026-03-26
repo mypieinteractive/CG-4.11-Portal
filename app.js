@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.11
-// Changes: Implemented chronological timeline expansion and "Today" highlighting. Added a 4-week 'Look Ahead' wrapper that activates if today is relevant. Rewrote the Edit Modal to dynamically render I/A fields for every day in a multi-date range, allowing real-time injection of new days. 
+// Version: V1.12
+// Changes: Removed date arguments from openAddModal. Modified renderCalendar to exclude individual footer [+] buttons. Updated saveNewEvent to elegantly handle injecting data to a completely blank JSON timeline.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -22,7 +22,7 @@ const editModal = document.getElementById('edit-modal');
 let eventsData = [];
 let lastUpdatedDate = "";
 let projectNumber = null;
-let editRelatedEvents = []; // Temporary store for dynamic editing
+let editRelatedEvents = [];
 
 // Initialize
 function init() {
@@ -128,7 +128,6 @@ function setupEventListeners() {
         if (e.target.files.length) handleFile(e.target.files[0]);
     });
 
-    // Dynamic Edit Range Listeners
     document.getElementById('edit-start-date').addEventListener('change', function() {
         updateRelatedEventsFromDOM();
         renderEditStats(this.value, document.getElementById('edit-end-date').value);
@@ -200,9 +199,11 @@ function processData(data) {
 }
 
 // ADD Modal Logic
-function openAddModal(dateStr) {
-    document.getElementById('add-start-date').value = dateStr;
-    document.getElementById('add-end-date').value = dateStr;
+function openAddModal() {
+    if (!projectNumber) return alert("Please add a ?project=XYZ variable to your URL to begin working.");
+
+    document.getElementById('add-start-date').value = '';
+    document.getElementById('add-end-date').value = '';
     document.getElementById('add-name').value = '';
     document.getElementById('add-invited').value = 0;
     document.getElementById('add-accepted').value = 0;
@@ -247,7 +248,7 @@ function saveNewEvent() {
     closeModals(); renderCalendar(); saveToDatabase();
 }
 
-// EDIT Modal Logic (Dynamic Range)
+// EDIT Modal Logic
 function openEditModal(eventId) {
     const ev = eventsData.find(e => e.id === eventId);
     if (!ev) return;
@@ -256,7 +257,6 @@ function openEditModal(eventId) {
     document.getElementById('edit-old-name').value = ev.name;
     document.getElementById('edit-notes').value = ev.notes || '';
     
-    // Group all events with same name for range editing
     editRelatedEvents = eventsData.filter(e => e.name === ev.name).sort((a,b) => new Date(a.date) - new Date(b.date));
     
     let startStr = editRelatedEvents[0].date;
@@ -284,7 +284,7 @@ function renderEditStats(startStr, endStr) {
     
     let current = new Date(start);
     while (current <= end) {
-        if (current.getDay() !== 0) { // Skip Sundays
+        if (current.getDay() !== 0) {
             let dStr = formatDateObj(current);
             let existing = editRelatedEvents.find(e => e.date === dStr);
             let inv = existing ? existing.invited : 0;
@@ -331,7 +331,6 @@ function saveEditedEvent() {
     
     updateRelatedEventsFromDOM(); 
     
-    // Purge old events for this block
     eventsData = eventsData.filter(e => e.name !== oldName);
     
     const startStr = document.getElementById('edit-start-date').value;
@@ -408,7 +407,6 @@ function renderCalendar() {
     let minDate = new Date(eventsData[0].date + 'T00:00:00');
     let maxDate = new Date(eventsData[eventsData.length - 1].date + 'T00:00:00');
 
-    // "Today" Timeline Logic
     let today = new Date();
     today.setHours(0,0,0,0);
     let todayStr = formatDateObj(today);
@@ -422,16 +420,11 @@ function renderCalendar() {
     let msDiff = startOfTodayWeek.getTime() - startOfGrid.getTime();
     let weeksDiff = Math.floor(msDiff / (7 * 86400000));
 
-    // If today is within event window OR up to 4 weeks prior
     if ((weeksDiff >= -4) && startOfTodayWeek <= getStartOfWeek(maxDate)) {
         showLookAhead = true;
-        
-        // Ensure grid starts early enough to show today
         if (startOfTodayWeek < startOfGrid) {
             startOfGrid = new Date(startOfTodayWeek);
         }
-        
-        // Ensure grid runs at least 4 weeks past today
         let minLookAheadEnd = new Date(startOfTodayWeek);
         minLookAheadEnd.setDate(minLookAheadEnd.getDate() + 27); 
         if (endOfGridWeek < minLookAheadEnd) {
@@ -456,7 +449,6 @@ function renderCalendar() {
             weekDates.push(formatDateObj(d));
         }
 
-        // Trigger wrapper for the 4-week window
         if (showLookAhead && currentLoopDate.getTime() === startOfTodayWeek.getTime()) {
             htmlStr += `
                 <div class="look-ahead-wrapper" id="current-week-scroll-target">
@@ -515,7 +507,7 @@ function renderCalendar() {
         let maxSlots = slotsOccupied.length;
         let weekHtml = `<div class="week-container">`;
 
-        // Render Backgrounds and Headers
+        // Render Backgrounds and Headers (Removed Footers)
         for (let i = 0; i < 6; i++) {
             if (!hasMondayEvents && i === 0) continue;
             let gridCol = hasMondayEvents ? i + 1 : i; 
@@ -523,8 +515,6 @@ function renderCalendar() {
             let dateStr = weekDates[i];
             let d = new Date(currentLoopDate); d.setDate(d.getDate() + i);
             let isDayEmpty = !weekEvents.some(e => e.date === dateStr);
-            
-            // Highlight today's background
             let isToday = (dateStr === todayStr);
             let bgClasses = `day-bg ${isDayEmpty && !isToday ? 'dimmed-empty' : ''} ${isToday ? 'today-highlight' : ''}`;
             
@@ -532,18 +522,13 @@ function renderCalendar() {
                 acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
             }, { invited: 0, accepted: 0 });
 
-            weekHtml += `<div class="${bgClasses}" style="grid-column: ${gridCol}; grid-row: 1 / span ${maxSlots + 2};"></div>`;
+            // Adjusted span to match maxSlots + 1 since footer row is removed
+            weekHtml += `<div class="${bgClasses}" style="grid-column: ${gridCol}; grid-row: 1 / span ${maxSlots + 1};"></div>`;
             
             weekHtml += `
                 <div class="cell-header" style="grid-column: ${gridCol}; grid-row: 1;">
                     <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
                     ${isDayEmpty ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle">${dayTotals.accepted}</span><span class="stat-divider">/</span><span class="stat-circle invited-circle">${dayTotals.invited}</span></div>`}
-                </div>
-            `;
-            
-            weekHtml += `
-                <div class="cell-footer" style="grid-column: ${gridCol}; grid-row: ${maxSlots + 2};">
-                    <button class="add-btn" onclick="openAddModal('${dateStr}')" title="Add Event">+</button>
                 </div>
             `;
         }
@@ -587,7 +572,6 @@ function renderCalendar() {
         weekHtml += `</div>`;
         htmlStr += weekHtml;
 
-        // Close Look Ahead Wrapper
         if (inLookAhead) {
             lookAheadCounter++;
             if (lookAheadCounter === 4) {
@@ -599,19 +583,14 @@ function renderCalendar() {
         currentLoopDate.setDate(currentLoopDate.getDate() + 7);
     }
     
-    // Safety close if loop finishes while inside wrapper
-    if (inLookAhead) {
-        htmlStr += `</div>`;
-    }
+    if (inLookAhead) htmlStr += `</div>`;
 
     calendarGrid.innerHTML = htmlStr;
 
-    // Trigger auto-scroll on page load if applicable
     if (showLookAhead) {
         setTimeout(() => {
             const target = document.getElementById('current-week-scroll-target');
             if (target) {
-                // Adjusts for sticky headers
                 const y = target.getBoundingClientRect().top + window.scrollY - 150; 
                 window.scrollTo({ top: y, behavior: 'smooth' });
             }
