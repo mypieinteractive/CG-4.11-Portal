@@ -1,9 +1,11 @@
 // File: app.js
-// Version: V1.20
-// Changes: Streamlined the setStatus function to hide text fields completely when empty, ensuring "Data Loaded" no longer appears. Triggered .loading-state on .header-right during fetch/save operations to temporarily hide buttons. 
+// Version: V2.0
+// Changes: Swapped the Google Apps Script endpoint for the native Glide v2 API. Added Glide authentication headers and table mutations using the exact JSON Blob schema mapping provided. Added a `projectRowIds` state tracker to map Projects to Glide $rowIDs for precise overwriting.
 
-// Config
-const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
+// Config (Glide v2 API)
+const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
+const GLIDE_TABLE_ID = 'native-table-89a2d186-a6d1-43f3-a973-bd3dd4bc4838';
+const GLIDE_TOKEN = '77804d07-3b60-415c-a8f8-4f84f33b974a';
 
 // DOM Elements
 const dropzone = document.getElementById('dropzone');
@@ -25,6 +27,7 @@ let lastUpdatedDate = "";
 let projectNumber = null;
 let projectTitle = null;
 let projectsList = [];
+let projectRowIds = {}; // Tracks Glide internal $rowIDs for each project
 let editRelatedEvents = [];
 let isGlobalView = false;
 let currentTypeFilter = "All";
@@ -81,64 +84,79 @@ function setStatus(msg, type = '') {
     }
 }
 
-// Database Communication
+// Database Communication (Glide v2 API)
 async function fetchDatabaseData() {
     document.querySelector('.header-right').classList.add('loading-state');
     lastUpdatedLabel.style.display = 'none';
     setStatus('Loading Data...');
     
     try {
-        const response = await fetch(`${API_URL}?project=${projectNumber}`);
-        const result = await response.json();
+        const response = await fetch('https://api.glideapp.io/api/function/queryTables', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${GLIDE_TOKEN}`
+            },
+            body: JSON.stringify({
+                appID: GLIDE_APP_ID,
+                queries: [{ tableName: GLIDE_TABLE_ID }]
+            })
+        });
         
-        if (result.status === 'success' && result.data) {
-            eventsData = [];
-            projectsList = [];
+        const result = await response.json();
+        const rows = result[0]?.rows || [];
+        
+        eventsData = [];
+        projectsList = [];
+        projectRowIds = {};
+        
+        rows.forEach(row => {
+            let pid = row['Name']; // pt column
+            let ptitle = row['GTdzD'] || pid; // title column
+            let rawJson = row['bunt6']; // json column
+            projectRowIds[pid] = row['$rowID']; // Store Glide's internal row ID for mutations
+
+            if (!isGlobalView && String(pid) === String(projectNumber) && projectTitle && ptitle !== projectTitle) {
+                ptitle = projectTitle;
+            }
+
+            if (!projectsList.find(p => p.id === pid)) {
+                projectsList.push({ id: pid, title: ptitle });
+            }
+
+            if (rawJson) {
+                try {
+                    let parsed = JSON.parse(rawJson);
+                    let evs = Array.isArray(parsed) ? parsed : (parsed.eventsData || []);
+                    evs.forEach(ev => {
+                        ev.projectId = pid;
+                        ev.projectTitle = ptitle;
+                        eventsData.push(ev);
+                    });
+
+                    if (!isGlobalView && String(pid) === String(projectNumber)) {
+                        lastUpdatedDate = parsed.lastUpdated || "Recent";
+                    }
+                } catch(e) { console.error('JSON Parse Error for project', pid); }
+            }
+        });
+
+        if (!isGlobalView && !projectsList.find(p => p.id === projectNumber)) {
+            projectsList.push({ id: projectNumber, title: projectTitle });
+        }
+
+        populateProjectDropdowns();
+
+        if(eventsData.length > 0) {
+            eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
             
-            result.data.forEach(proj => {
-                let pid = proj.projectId;
-                let ptitle = proj.projectTitle;
-
-                if (!isGlobalView && String(pid) === String(projectNumber) && projectTitle && ptitle !== projectTitle) {
-                    ptitle = projectTitle;
-                }
-
-                if (!projectsList.find(p => p.id === pid)) {
-                    projectsList.push({ id: pid, title: ptitle });
-                }
-
-                let evs = Array.isArray(proj.eventsData) ? proj.eventsData : (proj.eventsData.eventsData || []);
-                evs.forEach(ev => {
-                    ev.projectId = pid;
-                    ev.projectTitle = ptitle;
-                    eventsData.push(ev);
-                });
-            });
-
-            if (!isGlobalView && !projectsList.find(p => p.id === projectNumber)) {
-                projectsList.push({ id: projectNumber, title: projectTitle });
-            }
-
-            populateProjectDropdowns();
-
-            if(eventsData.length > 0) {
-                eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
-                
-                setStatus(''); // Clear Status
-                lastUpdatedDate = result.data[0]?.eventsData?.lastUpdated || "Recent";
-                lastUpdatedLabel.style.display = 'block';
-                lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
-            } else {
-                setStatus('No events found.');
-                lastUpdatedLabel.style.display = 'none';
-            }
+            setStatus(''); 
+            if (isGlobalView) lastUpdatedDate = "Recent";
+            lastUpdatedLabel.style.display = 'block';
+            lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
         } else {
-            setStatus('No data found for this project.');
+            setStatus('No events found.');
             lastUpdatedLabel.style.display = 'none';
-            if (!isGlobalView) {
-                projectsList.push({ id: projectNumber, title: projectTitle });
-            }
-            populateProjectDropdowns();
         }
         
         document.querySelector('.header-right').classList.remove('loading-state');
@@ -193,25 +211,51 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
         eventsData: cleanEvents
     };
 
+    const existingRowId = projectRowIds[String(targetId)];
+
+    const mutation = {
+        tableName: GLIDE_TABLE_ID,
+        columnValues: {
+            "Name": String(targetId),
+            "bunt6": JSON.stringify(payload),
+            "ZCpNj": cleanEvents.length,
+            "GTdzD": String(targetTitle)
+        }
+    };
+
+    if (existingRowId) {
+        mutation.kind = "set-columns-in-row";
+        mutation.rowID = existingRowId;
+    } else {
+        mutation.kind = "add-row-to-table";
+    }
+
     try {
-        const response = await fetch(API_URL, {
+        const response = await fetch('https://api.glideapp.io/api/function/mutateTables', {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${GLIDE_TOKEN}`
+            },
             body: JSON.stringify({ 
-                projectNumber: targetId, 
-                projectTitle: targetTitle,
-                eventsData: payload 
+                appID: GLIDE_APP_ID,
+                mutations: [mutation]
             })
         });
         
-        const result = await response.json();
-        if (result.status === 'success') {
+        if (response.ok) {
+            const result = await response.json();
+            
+            // If it was an add-row mutation, capture the newly generated Row ID
+            if (!existingRowId && result[0]?.rowIDs?.length > 0) {
+                projectRowIds[String(targetId)] = result[0].rowIDs[0];
+            }
+
             setStatus('');
             lastUpdatedLabel.style.display = 'block';
             lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
         } else {
-            setStatus(`Save Error`, 'error');
-            lastUpdatedLabel.style.display = 'none';
+            throw new Error('API Mutation Failed');
         }
         
         document.querySelector('.header-right').classList.remove('loading-state');
