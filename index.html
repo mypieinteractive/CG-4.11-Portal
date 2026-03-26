@@ -25,6 +25,14 @@
                         <div id="last-updated" class="last-updated"></div>
                     </div>
                     
+                    <select id="event-type-filter" class="header-action-btn" title="Filter by Event Type">
+                        <option value="All">All Types</option>
+                        <option value="Work Event">Work Events</option>
+                        <option value="Delivery">Deliveries</option>
+                        <option value="Inspection">Inspections</option>
+                        <option value="Other">Other</option>
+                    </select>
+
                     <button id="collapse-btn" class="header-action-btn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         Collapse Events
@@ -60,6 +68,16 @@
             </div>
             <div class="modal-body">
                 
+                <div class="form-group">
+                    <label>Event Type</label>
+                    <select id="add-type">
+                        <option value="Work Event" selected>Work Event</option>
+                        <option value="Delivery">Delivery</option>
+                        <option value="Inspection">Inspection</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label>Start Date</label>
@@ -75,7 +93,8 @@
                     <label>Event Name</label>
                     <input type="text" id="add-name" placeholder="Enter event name...">
                 </div>
-                <div class="form-row">
+
+                <div class="form-row" id="add-stats-wrapper">
                     <div class="form-group">
                         <label>Invited (Daily)</label>
                         <input type="number" id="add-invited" value="0" min="0">
@@ -85,6 +104,7 @@
                         <input type="number" id="add-accepted" value="0" min="0">
                     </div>
                 </div>
+
                 <div class="form-group">
                     <label>Notes</label>
                     <textarea id="add-notes" rows="2" placeholder="Add custom notes here..."></textarea>
@@ -101,6 +121,16 @@
             <div class="modal-body">
                 <input type="hidden" id="edit-old-name">
                 
+                <div class="form-group">
+                    <label>Event Type</label>
+                    <select id="edit-type">
+                        <option value="Work Event">Work Event</option>
+                        <option value="Delivery">Delivery</option>
+                        <option value="Inspection">Inspection</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label>Start Date</label>
@@ -112,7 +142,7 @@
                     </div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="edit-stats-wrapper">
                     <label>Daily Stats</label>
                     <div id="edit-daily-stats" class="edit-scroll-container">
                         </div>
