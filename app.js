@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V1.13
-// Changes: Ensured `maxSlots` enforces a minimum value of 1 so that completely empty weeks will still output an empty body row to sync with the CSS minmax(65px) row constraints.
+// Version: V1.14
+// Changes: Updated the auto-scroll logic at the end of renderCalendar() to dynamically calculate the height of the .sticky-top-section, ensuring the "3-Week Look Ahead" target scrolls perfectly snug under the header regardless of screen size.
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -504,7 +504,6 @@ function renderCalendar() {
             }
         });
         
-        // FIX: Ensure maxSlots is always at least 1, so the empty event row body is always rendered 
         let maxSlots = Math.max(slotsOccupied.length, 1);
         let weekHtml = `<div class="week-container">`;
 
@@ -523,7 +522,6 @@ function renderCalendar() {
                 acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
             }, { invited: 0, accepted: 0 });
 
-            // Using maxSlots + 1 guarantees it always covers the header and the empty body
             weekHtml += `<div class="${bgClasses}" style="grid-column: ${gridCol}; grid-row: 1 / span ${maxSlots + 1};"></div>`;
             
             weekHtml += `
@@ -591,8 +589,11 @@ function renderCalendar() {
     if (showLookAhead) {
         setTimeout(() => {
             const target = document.getElementById('current-week-scroll-target');
-            if (target) {
-                const y = target.getBoundingClientRect().top + window.scrollY - 150; 
+            const stickyHeader = document.querySelector('.sticky-top-section');
+            if (target && stickyHeader) {
+                const headerHeight = stickyHeader.offsetHeight;
+                // Get bounds, subtract header height, and apply a 20px visual margin above the 3-week text
+                const y = target.getBoundingClientRect().top + window.scrollY - headerHeight - 20; 
                 window.scrollTo({ top: y, behavior: 'smooth' });
             }
         }, 100);
