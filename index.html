@@ -25,6 +25,10 @@
                         <div id="last-updated" class="last-updated"></div>
                     </div>
                     
+                    <select id="project-filter" class="header-action-btn" title="Filter by Project" style="display: none;">
+                        <option value="All">All Projects</option>
+                    </select>
+
                     <select id="event-type-filter" class="header-action-btn" title="Filter by Event Type">
                         <option value="All">All Types</option>
                         <option value="Work Event">Work Events</option>
@@ -68,6 +72,11 @@
             </div>
             <div class="modal-body">
                 
+                <div class="form-group" id="add-project-group" style="display: none;">
+                    <label>Target Project</label>
+                    <select id="add-project"></select>
+                </div>
+
                 <div class="form-group">
                     <label>Event Type</label>
                     <select id="add-type">
@@ -158,6 +167,20 @@
                     <textarea id="edit-notes" rows="3" placeholder="Add custom notes here..."></textarea>
                 </div>
                 <button class="save-btn" onclick="saveEditedEvent()">Save Changes</button>
+            </div>
+        </div>
+
+        <div id="global-upload-modal" class="modal hidden">
+            <div class="modal-header">
+                <h2>Select Project for Upload</h2>
+                <button class="close-btn" onclick="closeModals()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Target Project</label>
+                    <select id="upload-project-select"></select>
+                </div>
+                <button class="save-btn" onclick="confirmGlobalUpload()">Continue Upload</button>
             </div>
         </div>
 
