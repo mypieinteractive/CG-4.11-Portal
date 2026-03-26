@@ -1,8 +1,8 @@
 /* File: styles.css */
-/* Version: V1.9 */
-/* Changes: Added styles for the 3-week Look Ahead Wrapper (.look-ahead-wrapper, .look-ahead-title). Added highlight styling for "Today" (.today-highlight). Added flex styles for dynamic per-day inputs in the edit modal (.daily-stat-row, .stat-date-label, .edit-scroll-container). */
+/* Version: V1.10 */
+/* Changes: Changed root bg-color to #1F1F1F. Tightened header padding. Compacted the upload-module into a horizontal layout. Added global-add-btn styling. Removed .cell-footer and individual .add-btn classes. */
 :root {
-    --bg-color: #121212;
+    --bg-color: #1F1F1F;
     --surface-color: #1E1E2F;
     --card-color: #2A2A40;
     --text-primary: #FFFFFF;
@@ -35,14 +35,14 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 0 10px 0;
+    padding: 10px 0 5px 0;
     flex-wrap: wrap;
     gap: 15px;
 }
 
 .header-left { display: flex; align-items: center; }
 .title-group h1 { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); }
-.header-right { display: flex; align-items: center; gap: 15px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
 .status-group { text-align: right; display: flex; flex-direction: column; justify-content: center; }
 
 .status { font-size: 0.85rem; font-weight: bold; }
@@ -50,23 +50,44 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 .status.error { color: #EF476F; }
 .last-updated { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
 
+/* Global Add Button */
+.global-add-btn {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    height: 38px;
+}
+.global-add-btn:hover {
+    background-color: var(--accent-hover);
+    box-shadow: 0 0 10px rgba(123, 97, 255, 0.3);
+}
+
 /* Drag and Drop Module */
 .upload-module {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 8px;
     background-color: var(--surface-color);
     color: var(--text-primary);
-    padding: 10px 20px;
+    padding: 8px 12px;
     border-radius: 8px;
     cursor: pointer;
     font-weight: 600;
     font-size: 0.85rem;
     transition: all 0.2s;
     border: 2px dashed var(--border-color);
-    min-width: 150px;
+    min-width: auto;
+    height: 38px;
 }
 .upload-module:hover { border-color: var(--accent-color); background-color: var(--card-color); }
 .upload-module.dragover { border-color: var(--accent-hover); box-shadow: 0 0 10px rgba(123, 97, 255, 0.3); }
@@ -121,12 +142,9 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     opacity: 1 !important;
 }
 
-/* Cell Headers and Footers */
+/* Cell Headers */
 .cell-header { z-index: 1; padding: 6px 8px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
 .header-left-col { font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
-.cell-footer { z-index: 1; padding: 4px 8px 8px 8px; display: flex; justify-content: flex-end; align-items: flex-end; }
-.add-btn { background: none; border: none; color: var(--accent-color); font-size: 1.2rem; cursor: pointer; line-height: 1; transition: color 0.2s; }
-.add-btn:hover { color: var(--accent-hover); }
 
 /* Event Cards & Segments */
 .event-card { background-color: var(--card-color); border-radius: 4px; border-left: 3px solid var(--accent-color); border-right: 3px solid transparent; transition: transform 0.1s, box-shadow 0.1s; position: relative; }
@@ -187,15 +205,11 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 .daily-stat-row:last-child { border-bottom: none; padding-bottom: 0; }
-.stat-date-label {
-    width: 45px;
-    font-size: 0.8rem;
-    font-weight: bold;
-    color: var(--text-secondary);
-}
+.stat-date-label { width: 45px; font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); }
 
 @media (max-width: 768px) {
     .header { flex-direction: column; align-items: stretch; text-align: center; }
     .header-left, .header-right { flex-direction: column; justify-content: center; }
     .status-group { text-align: center; }
+    .upload-module { min-width: 100%; }
 }
