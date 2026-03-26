@@ -1,6 +1,6 @@
 // File: app.js
 // Version: V1.20
-// Changes: Adjusted Look-Ahead wrapper logic to exclude the current week and only encase the next 3 weeks. Injected an isolated `#current-week-scroll-target` above the current week. Added `.calendar-bottom-padding` spacer to ensure Auto-Scroll is always possible on collapse. Added JS restructuring sequence for Global View header positioning.
+// Changes: Streamlined the setStatus function to hide text fields completely when empty, ensuring "Data Loaded" no longer appears. Triggered .loading-state on .header-right during fetch/save operations to temporarily hide buttons. 
 
 // Config
 const API_URL = 'https://script.google.com/macros/s/AKfycbzhUX2KFFXNDpci0XFgNie4fpqaEjmgqISeff2vNecXvySEmcA4nVjZ_E4R7WoGs4GVEw/exec';
@@ -41,7 +41,6 @@ function init() {
             isGlobalView = true;
             document.querySelector('.range-label').style.display = 'none';
             
-            // Restructure Global Header
             const header = document.querySelector('.header');
             const headerLeft = document.querySelector('.header-left');
             const statusGroup = document.querySelector('.status-group');
@@ -73,13 +72,21 @@ function extractProjectNumber() {
 }
 
 function setStatus(msg, type = '') {
-    statusIndicator.innerText = msg;
-    statusIndicator.className = `status ${type}`;
+    if (!msg) {
+        statusIndicator.style.display = 'none';
+    } else {
+        statusIndicator.style.display = 'block';
+        statusIndicator.innerText = msg;
+        statusIndicator.className = `status ${type}`;
+    }
 }
 
 // Database Communication
 async function fetchDatabaseData() {
-    setStatus('Loading project data...');
+    document.querySelector('.header-right').classList.add('loading-state');
+    lastUpdatedLabel.style.display = 'none';
+    setStatus('Loading Data...');
+    
     try {
         const response = await fetch(`${API_URL}?project=${projectNumber}`);
         const result = await response.json();
@@ -116,23 +123,31 @@ async function fetchDatabaseData() {
 
             if(eventsData.length > 0) {
                 eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
-                setStatus('Data loaded.', 'success');
+                
+                setStatus(''); // Clear Status
                 lastUpdatedDate = result.data[0]?.eventsData?.lastUpdated || "Recent";
+                lastUpdatedLabel.style.display = 'block';
                 lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
             } else {
-                setStatus('No events found. Upload a file.', '');
+                setStatus('No events found.');
+                lastUpdatedLabel.style.display = 'none';
             }
         } else {
-            setStatus('No data found for this project.', '');
+            setStatus('No data found for this project.');
+            lastUpdatedLabel.style.display = 'none';
             if (!isGlobalView) {
                 projectsList.push({ id: projectNumber, title: projectTitle });
             }
             populateProjectDropdowns();
         }
+        
+        document.querySelector('.header-right').classList.remove('loading-state');
         renderCalendar();
     } catch (error) {
         console.error('Fetch Error:', error);
+        document.querySelector('.header-right').classList.remove('loading-state');
         setStatus('Error loading database.', 'error');
+        lastUpdatedLabel.style.display = 'none';
         renderCalendar();
     }
 }
@@ -158,7 +173,10 @@ function populateProjectDropdowns() {
 async function saveToDatabase(targetId = projectNumber, targetTitle = projectTitle) {
     if (!targetId || targetId.toLowerCase() === 'global') return;
     
-    setStatus('Saving to database...');
+    document.querySelector('.header-right').classList.add('loading-state');
+    lastUpdatedLabel.style.display = 'none';
+    setStatus('Saving Data...');
+    
     const now = new Date();
     lastUpdatedDate = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear().toString().slice(-2)}`;
     
@@ -188,14 +206,20 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
         
         const result = await response.json();
         if (result.status === 'success') {
-            setStatus('Data saved.', 'success');
+            setStatus('');
+            lastUpdatedLabel.style.display = 'block';
             lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
         } else {
             setStatus(`Save Error`, 'error');
+            lastUpdatedLabel.style.display = 'none';
         }
+        
+        document.querySelector('.header-right').classList.remove('loading-state');
     } catch (error) {
         console.error('Save Error:', error);
+        document.querySelector('.header-right').classList.remove('loading-state');
         setStatus('Failed to save to database.', 'error');
+        lastUpdatedLabel.style.display = 'none';
     }
 }
 
@@ -245,7 +269,6 @@ function setupEventListeners() {
                 this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> Collapse Events`;
             }
 
-            // Force dynamic scroll repositioning even if collapsed calendar is short
             setTimeout(() => {
                 const target = document.getElementById('current-week-scroll-target');
                 const stickyHeader = document.querySelector('.sticky-top-section');
@@ -353,7 +376,10 @@ window.confirmGlobalUpload = function() {
 
 // File Processing
 function handleFile(file, pId, pTitle) {
+    document.querySelector('.header-right').classList.add('loading-state');
+    lastUpdatedLabel.style.display = 'none';
     setStatus('Parsing file...');
+    
     const reader = new FileReader();
     reader.onload = (e) => {
         const data = new Uint8Array(e.target.result);
@@ -712,7 +738,7 @@ function renderCalendar() {
             startOfGrid = new Date(startOfTodayWeek);
         }
         let minLookAheadEnd = new Date(startOfNextWeek);
-        minLookAheadEnd.setDate(minLookAheadEnd.getDate() + 20); // Force 3 extra weeks 
+        minLookAheadEnd.setDate(minLookAheadEnd.getDate() + 20); 
         if (endOfGridWeek < minLookAheadEnd) {
             endOfGridWeek = new Date(minLookAheadEnd);
         }
@@ -737,12 +763,10 @@ function renderCalendar() {
             weekDates.push(formatDateObj(d));
         }
 
-        // Anchor injection point for current week scroll target
         if (showLookAhead && currentLoopDate.getTime() === startOfTodayWeek.getTime()) {
             htmlStr += `<div id="current-week-scroll-target"></div>`;
         }
 
-        // Trigger Wrapper for the NEXT 3 weeks
         if (showLookAhead && currentLoopDate.getTime() === startOfNextWeek.getTime()) {
             htmlStr += `
                 <div class="look-ahead-wrapper">
@@ -802,7 +826,6 @@ function renderCalendar() {
         let maxSlots = Math.max(slotsOccupied.length, 1);
         let weekHtml = `<div class="week-container">`;
 
-        // Render Backgrounds and Headers
         for (let i = 0; i < 6; i++) {
             if (!hasMondayEvents && i === 0) continue;
             let gridCol = hasMondayEvents ? i + 1 : i; 
@@ -827,7 +850,6 @@ function renderCalendar() {
             `;
         }
 
-        // Render Event Blocks
         eventBlocks.forEach(block => {
             let colorIdx = uniqueGroupings.indexOf(block.groupKey);
             let styleColor = palette[colorIdx % palette.length];
@@ -895,7 +917,6 @@ function renderCalendar() {
     
     if (inLookAhead) htmlStr += `</div>`;
     
-    // Add bottom padding element so auto-scroll can always reach the top
     htmlStr += `<div class="calendar-bottom-padding"></div>`;
     calendarGrid.innerHTML = htmlStr;
 
