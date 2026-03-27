@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.16 */
-/* Changes: Added `.loading-state` class to dynamically hide all header elements (except the status group) during data fetch and save operations. */
+/* Version: V1.17 */
+/* Changes: Added absolute overlay to `::-webkit-calendar-picker-indicator` to make date inputs fully clickable. Replaced `.note-icon` with `.event-notes` text block. Added `.event-name-wrapper` to align type icons to the right of the title. */
 :root {
     --bg-color: #1F1F1F;
     --surface-color: #1E1E2F;
@@ -239,9 +239,33 @@ select.header-action-btn option {
 .day-segment { padding: 8px; display: flex; flex-direction: column; justify-content: space-between; height: 100%; cursor: pointer; position: relative; transition: background-color 0.1s; }
 .day-segment:hover { background-color: rgba(255, 255, 255, 0.05); }
 
-.event-name { font-size: calc(0.8rem - 2px); font-weight: normal; margin-bottom: 6px; white-space: normal; word-wrap: break-word; line-height: 1.3; padding-right: 15px;}
+/* Event Text & Icons */
+.event-name-wrapper {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 5px;
+}
+.event-name { 
+    font-size: calc(0.8rem - 2px); 
+    font-weight: normal; 
+    margin-bottom: 4px; 
+    white-space: normal; 
+    word-wrap: break-word; 
+    line-height: 1.3; 
+}
 .project-tag { font-size: 0.65rem; color: var(--text-secondary); opacity: 0.8; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px;}
-.note-icon { position: absolute; top: 6px; right: 6px; color: #FCA311; font-size: 0.9rem; }
+
+.event-notes {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+    margin-top: 2px;
+    margin-bottom: 6px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    line-height: 1.25;
+}
 
 /* Circular Stats & Type Icons */
 .event-stats, .header-totals { display: flex; flex-direction: row; justify-content: flex-end; align-items: center; gap: 2px; font-size: 0.75rem; font-weight: 600; }
@@ -249,7 +273,7 @@ select.header-action-btn option {
 .accepted-circle { border-color: var(--accepted-color); color: var(--accepted-color); }
 .invited-circle { border-color: var(--invited-color); color: var(--invited-color); }
 
-.type-icon { font-size: 1.1rem; filter: grayscale(0.2); }
+.type-icon { font-size: 1.0rem; filter: grayscale(0.2); flex-shrink: 0; }
 
 /* Modals */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; }
@@ -268,6 +292,23 @@ select.header-action-btn option {
 .form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--bg-color); border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; }
 .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--accent-color); }
 .form-group textarea { resize: vertical; }
+
+/* Fully Clickable Native Date Inputs */
+input[type="date"] {
+    position: relative;
+    cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    background: transparent;
+    color: transparent;
+}
 
 .save-btn { background: var(--accent-color); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-top: 5px;}
 .save-btn:hover { background: var(--accent-hover); }
