@@ -12,46 +12,58 @@
         
         <div class="sticky-top-section">
             <div class="sticky-top-content">
-                <header class="header">
-                    <div class="header-left">
-                        <div class="title-group">
-                            <div class="range-label">Range of Events:</div>
-                            <h1 id="project-date-range">Loading timeline...</h1>
-                        </div>
-                    </div>
-                    
-                    <div class="header-right">
-                        <div class="status-group">
-                            <div id="status-indicator" class="status">Waiting for data</div>
-                            <div id="last-updated" class="last-updated"></div>
+                
+                <div id="header-loader" class="header-loader">
+                    <div class="spinner"></div>
+                    <h2>Loading...</h2>
+                </div>
+
+                <div id="header-content" class="header-content" style="display: none;">
+                    <header class="header">
+                        <div class="header-left" id="main-title-group">
+                            <div class="title-group">
+                                <div class="range-label">Range of Events:</div>
+                                <h1 id="project-date-range"></h1>
+                            </div>
                         </div>
                         
-                        <select id="event-type-filter" class="header-action-btn" title="Filter by Event Type">
-                            <option value="All">All Types</option>
-                            <option value="Work Event">Work Events</option>
-                            <option value="Delivery">Deliveries</option>
-                            <option value="Inspection">Inspections</option>
-                            <option value="Other">Other</option>
-                        </select>
+                        <div class="header-right">
+                            <div class="status-group">
+                                <div id="last-updated" class="last-updated"></div>
+                            </div>
+                            
+                            <select id="project-filter" class="header-action-btn" title="Filter by Project" style="display: none;">
+                                <option value="All">All Projects</option>
+                            </select>
 
-                        <button id="collapse-btn" class="header-action-btn">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                            Collapse Events
-                        </button>
+                            <select id="event-type-filter" class="header-action-btn" title="Filter by Event Type">
+                                <option value="All">All Types</option>
+                                <option value="Work Event">Work Events</option>
+                                <option value="Delivery">Deliveries</option>
+                                <option value="Inspection">Inspections</option>
+                                <option value="Other">Other</option>
+                            </select>
 
-                        <button class="upload-module" id="upload-btn" title="Upload Events">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                            <span>Upload XLSX</span>
-                            <input type="file" id="file-input" accept=".xlsx, .xls, .csv" hidden>
-                        </button>
+                            <button id="collapse-btn" class="header-action-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                Collapse Events
+                            </button>
 
-                        <button class="global-add-btn" onclick="openAddModal()" title="Add Event">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        </button>
-                    </div>
-                </header>
+                            <button class="upload-module" id="upload-btn" title="Upload Events">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <span>Upload XLSX</span>
+                                <input type="file" id="file-input" accept=".xlsx, .xls, .csv" hidden>
+                            </button>
 
-                <div class="grid-headers"></div>
+                            <button class="global-add-btn" onclick="openAddModal()" title="Add Event">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            </button>
+                        </div>
+                    </header>
+
+                    <div class="grid-headers"></div>
+                </div>
+
             </div>
         </div>
 
@@ -120,7 +132,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Notes</label>
+                    <label>Notes (Applied to all days)</label>
                     <textarea id="add-notes" rows="2" placeholder="Add custom notes here..."></textarea>
                 </div>
                 <button class="save-btn" onclick="saveNewEvent()">Save Event</button>
@@ -135,11 +147,6 @@
             <div class="modal-body">
                 <input type="hidden" id="edit-old-name">
                 
-                <div id="edit-imported-note" class="imported-note" style="display: none;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                    Imported from BA
-                </div>
-
                 <div class="form-group" id="edit-type-group">
                     <label>Event Type</label>
                     <select id="edit-type">
@@ -162,16 +169,19 @@
                 </div>
 
                 <div class="form-group" id="edit-stats-wrapper">
-                    <label>Daily Stats</label>
+                    <label>Daily Details</label>
                     <div id="edit-daily-stats" class="edit-scroll-container">
                         </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="edit-notes" rows="3" placeholder="Add custom notes here..."></textarea>
+                <div class="modal-footer-actions">
+                    <div id="edit-imported-note" class="imported-note" style="display: none;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        Imported from BA
+                    </div>
+                    <button id="delete-btn" class="delete-btn" onclick="deleteEvent()">Delete</button>
+                    <button class="save-btn" onclick="saveEditedEvent()">Save Changes</button>
                 </div>
-                <button class="save-btn" onclick="saveEditedEvent()">Save Changes</button>
             </div>
         </div>
 
