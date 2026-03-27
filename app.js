@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.2
-// Changes: Switched the Glide Table ID to the new Project table. Updated the row mapping to use the native `$rowID` as the Project ID. Dynamically constructed the Project Title using the read-only columns (pt, address, citySt). Updated the mutation payload to only write to the `calendarJson` (KYRQV) and `calendarCount` (ltptW) columns.
+// Version: V2.3
+// Changes: Refactored `renderCalendar()` to display `ev.notes` directly under the title in `.event-notes`. Modified `cardStyle` injection so 'Delivery' and 'Inspection' events use a unique solid 30% background without edge stripes. Moved type icons to `.event-name-wrapper`.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -111,10 +111,8 @@ async function fetchDatabaseData() {
         projectRowIds = {};
         
         rows.forEach(row => {
-            // Glide natively assigns a unique $rowID to every row, which perfectly acts as our Project ID
             let pid = row['$rowID']; 
             
-            // Construct the dynamic title from Read-Only columns
             let pt = row['2UR8V'] || '';
             let address = row['Name'] || '';
             let citySt = row['8V1wO'] || '';
@@ -127,7 +125,6 @@ async function fetchDatabaseData() {
             let rawJson = row['KYRQV']; 
             projectRowIds[pid] = pid; 
 
-            // If this is a specific project view and the row is blank, allow the URL to override the title
             if (!isGlobalView && String(pid) === String(projectNumber) && projectTitle && !pt && !address) {
                 ptitle = projectTitle;
             }
@@ -232,7 +229,7 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
         tableName: GLIDE_TABLE_ID,
         columnValues: {
             "KYRQV": JSON.stringify(payload),
-            "ltptW": String(cleanEvents.length) // Enforced string type as requested
+            "ltptW": String(cleanEvents.length)
         }
     };
 
@@ -912,38 +909,53 @@ function renderCalendar() {
             let isMulti = block.span > 1;
             let gridCol = hasMondayEvents ? block.startCol + 1 : block.startCol;
             
-            let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2}; border-left-color: ${styleColor};`;
-            if (isMulti) cardStyle += ` border-right-color: ${styleColor}; background-color: ${styleColor}1A;`;
+            // Determine block type from the first segment
+            let blockType = block.segments[0].type || 'Work Event';
+            let isSpecial = blockType !== 'Work Event';
+
+            let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
+            
+            if (isSpecial) {
+                cardStyle += ` background-color: ${styleColor}4D; border-left: none; border-right: none; border-radius: 6px;`;
+            } else {
+                cardStyle += ` border-left-color: ${styleColor};`;
+                if (isMulti) {
+                    cardStyle += ` border-right-color: ${styleColor}; background-color: ${styleColor}1A;`;
+                }
+            }
             
             let segmentsHtml = block.segments.map((ev, idx) => {
                 const hasNotes = ev.notes && ev.notes.trim().length > 0;
                 let segmentStyle = (isMulti && idx < block.span - 1) ? `border-right: 1px dashed rgba(255,255,255,0.15);` : '';
                 
                 const evType = ev.type || 'Work Event';
-                let statsDisplayHtml = '';
+                let titleIcon = '';
+                let showStats = false;
                 
-                if (evType === 'Delivery') {
-                    statsDisplayHtml = `<span class="type-icon" title="Delivery">🚚</span>`;
-                } else if (evType === 'Inspection') {
-                    statsDisplayHtml = `<span class="type-icon" title="Inspection">🏷️✅</span>`;
-                } else if (evType === 'Other') {
-                    statsDisplayHtml = `<span class="type-icon" title="Other">📅</span>`;
-                } else {
-                    statsDisplayHtml = `
+                if (evType === 'Delivery') titleIcon = '🚚';
+                else if (evType === 'Inspection') titleIcon = '🏷️✅';
+                else if (evType === 'Other') titleIcon = '📅';
+                else showStats = true;
+                
+                let titleIconHtml = titleIcon ? `<span class="type-icon" title="${evType}">${titleIcon}</span>` : '';
+                let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
+
+                let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
+                let statsHtml = showStats ? `
+                    <div class="event-stats">
                         <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
                         <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
-                    `;
-                }
-                
-                let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
+                    </div>
+                ` : '';
 
                 return `
                     <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
-                        ${hasNotes ? `<span class="note-icon" title="${ev.notes}">📝</span>` : ''}
-                        <div class="event-name">${ev.name}${globalTag}</div>
-                        <div class="event-stats">
-                            ${statsDisplayHtml}
+                        <div class="event-name-wrapper">
+                            <div class="event-name">${ev.name}${globalTag}</div>
+                            ${titleIconHtml}
                         </div>
+                        ${notesHtml}
+                        ${statsHtml}
                     </div>
                 `;
             }).join('');
