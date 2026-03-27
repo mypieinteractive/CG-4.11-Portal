@@ -1,8 +1,9 @@
 /* File: styles.css */
-/* Version: V1.17 */
-/* Changes: Added absolute overlay to `::-webkit-calendar-picker-indicator` to make date inputs fully clickable. Replaced `.note-icon` with `.event-notes` text block. Added `.event-name-wrapper` to align type icons to the right of the title. */
+/* Version: V1.19 */
+/* Changes: Changed .event-name-wrapper to use flex-start justification so that the type icons align flush to the left of the event title. */
 :root {
-    --bg-color: #1F1F1F;
+    --bg-color: #0A0A0A;
+    --header-bg: #1F1F1F;
     --surface-color: #1E1E2F;
     --card-color: #2A2A40;
     --text-primary: #FFFFFF;
@@ -26,30 +27,37 @@
 
 ::-webkit-scrollbar { display: none; }
 
-body { background-color: var(--bg-color); color: var(--text-primary); padding: 0 10px 10px 10px; font-size: 14px; }
+body { background-color: var(--bg-color); color: var(--text-primary); padding: 0 10px 10px 10px; font-size: 14px; overflow-x: hidden; }
 
 .dashboard-container { width: 100%; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px; }
 
-/* Enhanced Sticky Header */
+/* Full Bleed Header */
 .sticky-top-section {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: linear-gradient(180deg, var(--surface-color) 0%, rgba(30,30,47,0.95) 100%);
-    backdrop-filter: blur(8px);
-    padding: 10px 15px 5px 15px;
-    border: 1px solid var(--border-color);
-    border-top: none;
-    border-radius: 0 0 12px 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    margin: 0 -5px 10px -5px; 
+    background-color: var(--header-bg);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 4px 30px rgba(0,0,0,0.6);
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    margin-bottom: 5px; 
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.sticky-top-content {
+    width: 100%;
+    max-width: 1400px;
+    padding: 10px 10px 0 10px;
 }
 
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 5px 0 10px 0;
+    padding: 5px 0 15px 0;
     flex-wrap: wrap;
     gap: 15px;
 }
@@ -129,52 +137,96 @@ select.header-action-btn option {
     color: var(--text-primary);
 }
 
-/* Global Add Button */
-.global-add-btn {
-    background-color: var(--accent-color);
-    color: white;
-    border: none;
-    width: 38px;
-    height: 38px;
-    padding: 0;
+/* Unified Action Buttons (+ and Upload) */
+.global-add-btn, .upload-module {
+    background-color: var(--bg-color); 
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s;
-}
-.global-add-btn:hover {
-    background-color: var(--accent-hover);
-    box-shadow: 0 0 10px rgba(123, 97, 255, 0.3);
-}
-
-/* Drag and Drop Module */
-.upload-module {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background-color: var(--bg-color);
-    color: var(--text-primary);
-    padding: 8px 12px;
-    border-radius: 8px;
-    cursor: pointer;
+    height: 38px;
     font-weight: 600;
     font-size: 0.85rem;
-    transition: all 0.2s;
-    border: 1px solid var(--border-color);
-    min-width: auto;
-    height: 38px;
 }
-.upload-module:hover { border-color: var(--accent-color); background-color: var(--card-color); }
-.upload-module.dragover { border-color: var(--accent-hover); box-shadow: 0 0 10px rgba(123, 97, 255, 0.3); }
+.global-add-btn {
+    width: 38px;
+    padding: 0;
+}
+.upload-module {
+    flex-direction: row;
+    gap: 8px;
+    padding: 8px 12px;
+    min-width: auto;
+}
+.global-add-btn:hover, .upload-module:hover { 
+    border-color: var(--accent-color); 
+    background-color: var(--card-color); 
+}
+
+/* Global Drag Overlay */
+.global-drag-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(10, 10, 10, 0.85);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    backdrop-filter: blur(4px);
+}
+.global-drag-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+}
+.global-drag-overlay.hidden { display: none; }
+
+.drag-overlay-box {
+    border: 3px dashed var(--accent-color);
+    border-radius: 16px;
+    padding: 50px 80px;
+    background: var(--surface-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    max-width: 600px;
+}
+.drag-overlay-box svg {
+    color: var(--accent-color);
+    width: 64px;
+    height: 64px;
+}
+.drag-overlay-box h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+    line-height: 1.4;
+}
 
 /* Calendar Wrapper & Grid Layout */
 .calendar-wrapper { width: 100%; display: flex; flex-direction: column; gap: 5px; }
-.grid-headers { display: grid; grid-template-columns: repeat(var(--col-count, 6), 1fr); gap: 5px; padding-top: 10px; }
-.day-label { text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; padding: 5px 0; }
+
+.grid-headers { 
+    display: grid; 
+    grid-template-columns: repeat(var(--col-count, 6), 1fr); 
+    gap: 5px; 
+    padding-top: 8px; 
+    padding-bottom: 2px;
+    border-top: 1px solid var(--border-color);
+}
+.day-label { text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; padding: 2px 0; }
 .calendar-grid { display: flex; flex-direction: column; gap: 10px; }
 
 /* Forces ability to scroll to top regardless of calendar depth */
@@ -242,9 +294,9 @@ select.header-action-btn option {
 /* Event Text & Icons */
 .event-name-wrapper {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: flex-start;
-    gap: 5px;
+    gap: 6px;
 }
 .event-name { 
     font-size: calc(0.8rem - 2px); 
@@ -273,7 +325,7 @@ select.header-action-btn option {
 .accepted-circle { border-color: var(--accepted-color); color: var(--accepted-color); }
 .invited-circle { border-color: var(--invited-color); color: var(--invited-color); }
 
-.type-icon { font-size: 1.0rem; filter: grayscale(0.2); flex-shrink: 0; }
+.type-icon { font-size: 1.0rem; filter: grayscale(0.2); flex-shrink: 0; margin-top: -1px;}
 
 /* Modals */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; }
