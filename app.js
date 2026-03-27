@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.6
-// Changes: Implemented robust null checks and ID normalization in `fetchDatabaseData` to permanently resolve the Global crash and Individual load failures. Added `deleteEvent()`. Replaced generic emojis with clean SVG paths for Delivery, Inspection, and Other. Restructured the Edit Modal daily stats generator to include a distinct Notes input for every single day. Hid `#main-title-group` natively in Global mode to reclaim header space.
+// Version: V2.7
+// Changes: Modified `setHeaderLoading` to hide the `.header` WITHOUT destroying the `.calendarGrid`, fixing the blank UI bug. Forced the Edit Modal's Daily Stats container to remain visible for Delivery/Inspection/Other events so Notes can be edited. Removed Date selectors for imported events. Updated `saveNewEvent` to assign the primary note only to the first active day of a span.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -78,14 +78,14 @@ function extractProjectNumber() {
 
 function setHeaderLoading(isLoading) {
     const loader = document.getElementById('header-loader');
-    const content = document.getElementById('header-content');
+    const header = document.querySelector('.header'); // Hide only the buttons header row, leaving calendar intact
+    
     if (isLoading) {
         if(loader) loader.style.display = 'flex';
-        if(content) content.style.display = 'none';
-        calendarGrid.innerHTML = '';
+        if(header) header.style.display = 'none';
     } else {
         if(loader) loader.style.display = 'none';
-        if(content) content.style.display = 'block';
+        if(header) header.style.display = 'flex';
     }
 }
 
@@ -149,10 +149,8 @@ async function fetchDatabaseData() {
                     let parsed = JSON.parse(rawJson);
                     let evs = Array.isArray(parsed) ? parsed : (parsed.eventsData || []);
                     
-                    // Strict ID match to prevent filtering out correct data
                     if (isGlobalView || String(pid).trim() === String(projectNumber).trim()) {
                         evs.forEach(ev => {
-                            // Valid Date Quarantine Check
                             if(ev.date && !isNaN(new Date(ev.date).getTime())) {
                                 ev.projectId = pid;
                                 ev.projectTitle = ptitle;
@@ -415,19 +413,20 @@ function setupEventListeners() {
         const endGroup = document.getElementById('edit-end-date-group');
         const statsWrapper = document.getElementById('edit-stats-wrapper');
 
+        statsWrapper.style.display = 'block'; // Always visible now to show notes!
+
         if (val === 'Work Event') {
-            statsWrapper.style.display = 'block';
             endGroup.style.display = 'flex';
             startLabel.innerText = 'Start Date';
         } else if (val === 'Delivery' || val === 'Inspection') {
-            statsWrapper.style.display = 'none';
             endGroup.style.display = 'none';
             startLabel.innerText = `Date of ${val}`;
         } else {
-            statsWrapper.style.display = 'none';
             endGroup.style.display = 'flex';
             startLabel.innerText = 'Start Date';
         }
+
+        renderEditStats(document.getElementById('edit-start-date').value, document.getElementById('edit-end-date').value);
     });
 
     document.getElementById('edit-start-date').addEventListener('change', function() {
@@ -578,6 +577,7 @@ function saveNewEvent() {
     const invited = isWorkEvent ? (parseInt(document.getElementById('add-invited').value) || 0) : 0;
     const accepted = isWorkEvent ? (parseInt(document.getElementById('add-accepted').value) || 0) : 0;
 
+    let firstDayAssigned = false;
     while (current <= end) {
         if (current.getDay() !== 0) { 
             eventsData.push({
@@ -586,12 +586,13 @@ function saveNewEvent() {
                 date: formatDateObj(current),
                 invited: invited, 
                 accepted: accepted, 
-                notes: notes,
+                notes: !firstDayAssigned ? notes : "",
                 type: eventType,
                 imported: false,
                 projectId: String(pId),
                 projectTitle: pTitle
             });
+            firstDayAssigned = true;
         }
         current.setDate(current.getDate() + 1);
     }
@@ -612,17 +613,22 @@ function openEditModal(eventId) {
     const importedNote = document.getElementById('edit-imported-note');
     const deleteBtn = document.getElementById('delete-btn');
     const typeSelect = document.getElementById('edit-type');
+    const startDateGroup = document.getElementById('edit-start-date').closest('.form-group');
+    const endDateGroup = document.getElementById('edit-end-date-group');
     
     if (ev.imported) {
         typeGroup.style.display = 'none';
         importedNote.style.display = 'flex';
         deleteBtn.style.display = 'none';
         typeSelect.value = 'Work Event';
+        startDateGroup.style.display = 'none';
+        endDateGroup.style.display = 'none';
     } else {
         typeGroup.style.display = 'flex';
         importedNote.style.display = 'none';
         deleteBtn.style.display = 'block';
         typeSelect.value = ev.type || 'Work Event';
+        startDateGroup.style.display = 'flex';
     }
 
     typeSelect.dispatchEvent(new Event('change')); 
@@ -653,6 +659,9 @@ function renderEditStats(startStr, endStr) {
     let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
     if (end < start) end = new Date(start);
     
+    const evType = document.getElementById('edit-type').value;
+    const showStats = evType === 'Work Event';
+
     let current = new Date(start);
     while (current <= end) {
         if (current.getDay() !== 0) {
@@ -662,21 +671,24 @@ function renderEditStats(startStr, endStr) {
             let acc = existing ? existing.accepted : 0;
             let note = existing && existing.notes ? existing.notes : '';
             
-            // Generate a row with specific note binding
+            let statsHtml = showStats ? `
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
+                    <label>I:</label>
+                    <input type="number" class="edit-inv-input" value="${inv}" min="0" style="padding: 5px;">
+                </div>
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
+                    <label>A:</label>
+                    <input type="number" class="edit-acc-input" value="${acc}" min="0" style="padding: 5px;">
+                </div>
+            ` : `<input type="hidden" class="edit-inv-input" value="0"><input type="hidden" class="edit-acc-input" value="0">`;
+
             container.innerHTML += `
                 <div class="daily-stat-row" data-date="${dStr}">
                     <div class="daily-stat-row-top">
                         <div class="stat-date-label">${current.getMonth()+1}/${current.getDate()}</div>
-                        <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
-                            <label>I:</label>
-                            <input type="number" class="edit-inv-input" value="${inv}" min="0" style="padding: 5px;">
-                        </div>
-                        <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
-                            <label>A:</label>
-                            <input type="number" class="edit-acc-input" value="${acc}" min="0" style="padding: 5px;">
-                        </div>
+                        ${statsHtml}
                     </div>
-                    <input type="text" class="edit-note-input" value="${note}" placeholder="Notes for this day...">
+                    <textarea class="edit-note-input" rows="2" placeholder="Notes for this day...">${note}</textarea>
                 </div>
             `;
         }
@@ -963,9 +975,9 @@ function renderCalendar() {
             let isSpecial = blockType !== 'Work Event';
 
             if (blockType === 'Delivery') {
-                styleColor = '#F39C12'; // Orange
+                styleColor = '#F39C12'; 
             } else if (blockType === 'Inspection') {
-                styleColor = '#E74C3C'; // Red
+                styleColor = '#E74C3C'; 
             }
 
             let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
