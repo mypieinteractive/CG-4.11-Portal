@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.21 */
-/* Changes: Converted dashboard and header backgrounds to transparent, revealing the new #0A0A0A body base. Added specific borders and backgrounds to .grid-headers. Adjusted modal footer for the Delete button layout. Stacked the dynamic daily rows to fit individual Notes. */
+/* Version: V1.22 */
+/* Changes: Swapped `.sticky-top-section` background to `#0A0A0A` to perfectly mask scrolling content beneath the day-of-the-week headers. Added `.edit-note-input` text area styling for multi-line daily notes. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -30,19 +30,18 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 
 .dashboard-container { width: 100%; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px; }
 
-/* Full Bleed Transparent Header */
+/* Full Bleed Opaque Header to mask scrolling */
 .sticky-top-section {
     position: sticky;
     top: 0;
     z-index: 100;
-    background-color: transparent; 
+    background-color: var(--bg-color); 
     width: 100vw;
     margin-left: calc(-50vw + 50%);
     margin-bottom: 5px; 
     display: flex;
     flex-direction: column;
     align-items: center;
-    pointer-events: none; /* Allows clicks to pass through transparent areas */
 }
 
 .sticky-top-content {
@@ -50,7 +49,6 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     max-width: 1400px;
     padding: 10px 10px 0 10px;
     min-height: 90px;
-    pointer-events: auto; /* Re-enable clicks for the header content */
 }
 
 /* Header Loader Overlay */
@@ -61,7 +59,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     justify-content: center;
     padding: 15px 0;
     gap: 12px;
-    background: var(--bg-color); /* Cover underlying elements cleanly */
+    background: var(--bg-color); 
 }
 .spinner {
     width: 28px;
@@ -77,11 +75,11 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 .header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end; /* Align to bottom */
+    align-items: flex-end; 
     padding: 5px 0 15px 0;
     flex-wrap: wrap;
     gap: 15px;
-    background-color: var(--bg-color); /* Ensure readability against scrolling events */
+    background-color: var(--bg-color); 
 }
 
 .header-left { display: flex; align-items: center; }
@@ -311,6 +309,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 .daily-stat-row:last-child { border-bottom: none; padding-bottom: 0; }
 .daily-stat-row-top { display: flex; align-items: center; gap: 15px; }
 .stat-date-label { width: 45px; font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); }
+.edit-note-input { width: 100%; background: var(--bg-color); border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; resize: vertical; }
+.edit-note-input:focus { border-color: var(--accent-color); }
 
 @media (max-width: 768px) {
     .header { flex-direction: column; align-items: stretch; text-align: center; }
