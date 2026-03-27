@@ -11,55 +11,60 @@
     <div class="dashboard-container">
         
         <div class="sticky-top-section">
-            <header class="header">
-                <div class="header-left">
-                    <div class="title-group">
-                        <div class="range-label">Range of Events:</div>
-                        <h1 id="project-date-range">Loading timeline...</h1>
-                    </div>
-                </div>
-                
-                <div class="header-right">
-                    <div class="status-group">
-                        <div id="status-indicator" class="status">Waiting for data</div>
-                        <div id="last-updated" class="last-updated"></div>
+            <div class="sticky-top-content">
+                <header class="header">
+                    <div class="header-left">
+                        <div class="title-group">
+                            <div class="range-label">Range of Events:</div>
+                            <h1 id="project-date-range">Loading timeline...</h1>
+                        </div>
                     </div>
                     
-                    <select id="project-filter" class="header-action-btn" title="Filter by Project" style="display: none;">
-                        <option value="All">All Projects</option>
-                    </select>
+                    <div class="header-right">
+                        <div class="status-group">
+                            <div id="status-indicator" class="status">Waiting for data</div>
+                            <div id="last-updated" class="last-updated"></div>
+                        </div>
+                        
+                        <select id="event-type-filter" class="header-action-btn" title="Filter by Event Type">
+                            <option value="All">All Types</option>
+                            <option value="Work Event">Work Events</option>
+                            <option value="Delivery">Deliveries</option>
+                            <option value="Inspection">Inspections</option>
+                            <option value="Other">Other</option>
+                        </select>
 
-                    <select id="event-type-filter" class="header-action-btn" title="Filter by Event Type">
-                        <option value="All">All Types</option>
-                        <option value="Work Event">Work Events</option>
-                        <option value="Delivery">Deliveries</option>
-                        <option value="Inspection">Inspections</option>
-                        <option value="Other">Other</option>
-                    </select>
+                        <button id="collapse-btn" class="header-action-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            Collapse Events
+                        </button>
 
-                    <button id="collapse-btn" class="header-action-btn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                        Collapse Events
-                    </button>
+                        <button class="upload-module" id="upload-btn" title="Upload Events">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            <span>Upload XLSX</span>
+                            <input type="file" id="file-input" accept=".xlsx, .xls, .csv" hidden>
+                        </button>
 
-                    <div class="upload-module" id="dropzone">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        <span>Upload XLSX</span>
-                        <input type="file" id="file-input" accept=".xlsx, .xls, .csv" hidden>
+                        <button class="global-add-btn" onclick="openAddModal()" title="Add Event">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
                     </div>
+                </header>
 
-                    <button class="global-add-btn" onclick="openAddModal()" title="Add Event">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    </button>
-                </div>
-            </header>
-
-            <div class="grid-headers"></div>
+                <div class="grid-headers"></div>
+            </div>
         </div>
 
         <div class="calendar-wrapper">
             <div id="calendar-grid" class="calendar-grid">
             </div>
+        </div>
+    </div>
+
+    <div id="global-drag-overlay" class="global-drag-overlay hidden">
+        <div class="drag-overlay-box">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <h2>Drop the "Event Export" XLSX file from BA here to add or update events</h2>
         </div>
     </div>
 
