@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.8
-// Changes: Fixed `setHeaderLoading` to properly target the `#header-content` wrapper so that the inline `display: none` is successfully removed when loading finishes, restoring the entire header to view. 
+// Version: V2.9
+// Changes: Reverted the bloated date-checking logic from fetchDatabaseData. Fixed setHeaderLoading to properly target the `#header-content` wrapper so the header reliably reappears after the loading sequence completes.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -35,11 +35,11 @@ let currentProjectFilter = "All";
 let pendingUploadFile = null;
 let dragCounter = 0;
 
-// SVG Icons
+// Sleek Theme SVG Icons
 const icons = {
-    delivery: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`,
-    inspection: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><polyline points="7 12.5 10 15.5 16 9.5"></polyline></svg>`,
-    other: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`
+    delivery: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`,
+    inspection: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><polyline points="7 12.5 10 15.5 16 9.5"></polyline></svg>`,
+    other: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`
 };
 
 // Initialize
@@ -48,7 +48,7 @@ function init() {
     extractProjectNumber();
 
     if (projectNumber) {
-        if (projectNumber.toLowerCase() === 'global') {
+        if (String(projectNumber).toLowerCase().trim() === 'global') {
             isGlobalView = true;
             const mainTitleGroup = document.getElementById('main-title-group');
             if(mainTitleGroup) mainTitleGroup.style.display = 'none';
@@ -68,14 +68,16 @@ function extractProjectNumber() {
 
     if (extractedTitle && window.location.hash) {
         extractedTitle += window.location.hash;
-        try { extractedTitle = decodeURIComponent(extractedTitle); } catch(e) {}
-    } else if (extractedTitle) {
+    }
+    
+    if (extractedTitle) {
         try { extractedTitle = decodeURIComponent(extractedTitle); } catch(e) {}
     }
 
     projectTitle = extractedTitle || projectNumber;
 }
 
+// Fade overlay safely without destroying DOM elements
 function setHeaderLoading(isLoading) {
     const loader = document.getElementById('header-loader');
     const content = document.getElementById('header-content'); 
@@ -83,6 +85,7 @@ function setHeaderLoading(isLoading) {
     if (isLoading) {
         if(loader) loader.style.display = 'flex';
         if(content) content.style.display = 'none';
+        calendarGrid.innerHTML = '';
     } else {
         if(loader) loader.style.display = 'none';
         if(content) content.style.display = 'block';
@@ -92,7 +95,6 @@ function setHeaderLoading(isLoading) {
 // Database Communication (Glide v2 API)
 async function fetchDatabaseData() {
     setHeaderLoading(true);
-    lastUpdatedLabel.style.display = 'none';
     
     try {
         const response = await fetch('https://api.glideapp.io/api/function/queryTables', {
@@ -151,11 +153,9 @@ async function fetchDatabaseData() {
                     
                     if (isGlobalView || String(pid).trim() === String(projectNumber).trim()) {
                         evs.forEach(ev => {
-                            if(ev.date && !isNaN(new Date(ev.date).getTime())) {
-                                ev.projectId = pid;
-                                ev.projectTitle = ptitle;
-                                eventsData.push(ev);
-                            }
+                            ev.projectId = pid;
+                            ev.projectTitle = ptitle;
+                            eventsData.push(ev);
                         });
 
                         if (!isGlobalView) {
@@ -174,20 +174,14 @@ async function fetchDatabaseData() {
 
         if(eventsData.length > 0) {
             eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
-            if (isGlobalView) lastUpdatedDate = "Recent";
-            lastUpdatedLabel.style.display = 'block';
-            lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
-        } else {
-            lastUpdatedLabel.style.display = 'none';
         }
         
         setHeaderLoading(false);
         renderCalendar();
     } catch (error) {
         console.error('Fetch Error:', error);
-        setHeaderLoading(false);
-        lastUpdatedLabel.style.display = 'none';
         projectDateRange.innerText = "Error Loading Database";
+        setHeaderLoading(false);
         renderCalendar();
     }
 }
@@ -218,7 +212,7 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
     setHeaderLoading(true);
     
     const now = new Date();
-    lastUpdatedDate = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear().toString().slice(-2)}`;
+    const lastUpdatedStr = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear().toString().slice(-2)}`;
     
     const projectEvents = eventsData.filter(e => e.projectId === String(targetId));
     
@@ -228,7 +222,7 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
     });
 
     const payload = {
-        lastUpdated: lastUpdatedDate,
+        lastUpdated: lastUpdatedStr,
         totalEvents: cleanEvents.length,
         eventsData: cleanEvents
     };
@@ -265,13 +259,9 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
         
         if (response.ok) {
             const result = await response.json();
-            
             if (!existingRowId && result[0]?.rowIDs?.length > 0) {
                 projectRowIds[String(targetId)] = result[0].rowIDs[0];
             }
-
-            lastUpdatedLabel.style.display = 'block';
-            lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
         } else {
             throw new Error('API Mutation Failed');
         }
@@ -280,7 +270,6 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
     } catch (error) {
         console.error('Save Error:', error);
         setHeaderLoading(false);
-        lastUpdatedLabel.style.display = 'none';
     }
 }
 
@@ -802,7 +791,7 @@ function renderCalendar() {
     calendarGrid.innerHTML = '';
     const gridHeaders = document.querySelector('.grid-headers');
     gridHeaders.innerHTML = '';
-    
+
     let displayEvents = eventsData;
     if (currentTypeFilter !== "All") {
         displayEvents = displayEvents.filter(e => (e.type || 'Work Event') === currentTypeFilter);
@@ -818,6 +807,12 @@ function renderCalendar() {
     
     displayEvents.forEach(ev => { if(!ev.id) ev.id = generateId(); });
 
+    let validDates = displayEvents.map(e => new Date(e.date + 'T00:00:00')).filter(d => !isNaN(d.getTime()));
+    if(validDates.length === 0) return;
+
+    let minDate = new Date(Math.min(...validDates));
+    let maxDate = new Date(Math.max(...validDates));
+
     const hasMondayEvents = displayEvents.some(e => new Date(e.date + 'T00:00:00').getDay() === 1);
     const colCount = hasMondayEvents ? 6 : 5;
     document.documentElement.style.setProperty('--col-count', colCount);
@@ -827,9 +822,6 @@ function renderCalendar() {
         <div class="day-label">Tue</div><div class="day-label">Wed</div>
         <div class="day-label">Thu</div><div class="day-label">Fri</div><div class="day-label">Sat</div>
     `;
-
-    let minDate = new Date(displayEvents[0].date + 'T00:00:00');
-    let maxDate = new Date(displayEvents[displayEvents.length - 1].date + 'T00:00:00');
 
     let today = new Date();
     today.setHours(0,0,0,0);
