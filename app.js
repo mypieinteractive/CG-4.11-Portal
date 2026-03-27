@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.10
-// Changes: Conditionally hid header totals on non-work event days. Moved work event counters to the event title wrapper. Added inline editing functionality for invited/accepted counters.
+// Version: V2.11
+// Changes: Limited Event title to two lines with hover title. Passed clicked segment date to openEditModal for highlighting row focus. Moved modal field visibility logic to execute after the type 'change' event dispatch to ensure imported events accurately hide Start/End dates.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -605,22 +605,22 @@ function openEditModal(eventId) {
     const startDateGroup = document.getElementById('edit-start-date').closest('.form-group');
     const endDateGroup = document.getElementById('edit-end-date-group');
     
+    // Dispatch type change FIRST so it doesn't override the manual visibility overrides below
+    typeSelect.value = ev.type || 'Work Event';
+    typeSelect.dispatchEvent(new Event('change')); 
+    
     if (ev.imported) {
         typeGroup.style.display = 'none';
         importedNote.style.display = 'flex';
         deleteBtn.style.display = 'none';
-        typeSelect.value = 'Work Event';
         startDateGroup.style.display = 'none';
         endDateGroup.style.display = 'none';
     } else {
         typeGroup.style.display = 'flex';
         importedNote.style.display = 'none';
         deleteBtn.style.display = 'block';
-        typeSelect.value = ev.type || 'Work Event';
         startDateGroup.style.display = 'flex';
     }
-
-    typeSelect.dispatchEvent(new Event('change')); 
     
     editRelatedEvents = eventsData.filter(e => e.name === ev.name && e.projectId === ev.projectId).sort((a,b) => new Date(a.date) - new Date(b.date));
     
@@ -630,7 +630,8 @@ function openEditModal(eventId) {
     document.getElementById('edit-start-date').value = startStr;
     document.getElementById('edit-end-date').value = endStr;
     
-    renderEditStats(startStr, endStr);
+    // Pass the clicked segment's date for highlighting
+    renderEditStats(startStr, endStr, ev.date);
 
     modalOverlay.classList.remove('hidden');
     editModal.classList.remove('hidden');
@@ -638,7 +639,7 @@ function openEditModal(eventId) {
     if(uploadModal) uploadModal.classList.add('hidden');
 }
 
-function renderEditStats(startStr, endStr) {
+function renderEditStats(startStr, endStr, highlightDate = null) {
     const container = document.getElementById('edit-daily-stats');
     container.innerHTML = '';
     
@@ -671,8 +672,11 @@ function renderEditStats(startStr, endStr) {
                 </div>
             ` : `<input type="hidden" class="edit-inv-input" value="0"><input type="hidden" class="edit-acc-input" value="0">`;
 
+            let isHighlighted = (dStr === highlightDate);
+            let rowClass = isHighlighted ? 'daily-stat-row highlighted-row' : 'daily-stat-row';
+
             container.innerHTML += `
-                <div class="daily-stat-row" data-date="${dStr}">
+                <div class="${rowClass}" data-date="${dStr}">
                     <div class="daily-stat-row-top">
                         <div class="stat-date-label">${current.getMonth()+1}/${current.getDate()}</div>
                         ${statsHtml}
@@ -682,6 +686,17 @@ function renderEditStats(startStr, endStr) {
             `;
         }
         current.setDate(current.getDate() + 1);
+    }
+
+    if (highlightDate) {
+        setTimeout(() => {
+            const row = container.querySelector(`.daily-stat-row[data-date="${highlightDate}"]`);
+            if (row) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const firstInput = row.querySelector('input:not([type="hidden"])');
+                if (firstInput) firstInput.focus();
+            }
+        }, 50);
     }
 }
 
@@ -1007,12 +1022,14 @@ function renderCalendar() {
                     </div>
                 ` : '';
 
+                const safeName = ev.name.replace(/"/g, '&quot;');
+
                 return `
                     <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
                         <div class="event-name-wrapper" style="align-items: center;">
                             ${titleIconHtml}
                             ${statsHtml}
-                            <div class="event-name">${ev.name}${globalTag}</div>
+                            <div class="event-name" title="${safeName}">${ev.name}${globalTag}</div>
                         </div>
                         ${notesHtml}
                     </div>
