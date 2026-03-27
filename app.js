@@ -1,6 +1,6 @@
 // File: app.js
 // Version: V2.3
-// Changes: Refactored `renderCalendar()` to display `ev.notes` directly under the title in `.event-notes`. Modified `cardStyle` injection so 'Delivery' and 'Inspection' events use a unique solid 30% background without edge stripes. Moved type icons to `.event-name-wrapper`.
+// Changes: Hardcoded standard colors for 'Delivery' (Orange) and 'Inspection' (Red) event cards. Swapped HTML layout within `.event-name-wrapper` to place the Type icon strictly to the left of the event title text.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -8,7 +8,7 @@ const GLIDE_TABLE_ID = 'native-table-jl3zoddzYY6WxSA4YQZj';
 const GLIDE_TOKEN = '77804d07-3b60-415c-a8f8-4f84f33b974a';
 
 // DOM Elements
-const dropzone = document.getElementById('dropzone');
+const uploadBtn = document.getElementById('upload-btn');
 const fileInput = document.getElementById('file-input');
 const statusIndicator = document.getElementById('status-indicator');
 const lastUpdatedLabel = document.getElementById('last-updated');
@@ -20,6 +20,7 @@ const modalOverlay = document.getElementById('modal-overlay');
 const addModal = document.getElementById('add-modal');
 const editModal = document.getElementById('edit-modal');
 const uploadModal = document.getElementById('global-upload-modal');
+const dragOverlay = document.getElementById('global-drag-overlay');
 
 // State
 let eventsData = [];
@@ -33,6 +34,7 @@ let isGlobalView = false;
 let currentTypeFilter = "All";
 let currentProjectFilter = "All";
 let pendingUploadFile = null;
+let dragCounter = 0;
 
 // Initialize
 function init() {
@@ -229,7 +231,7 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
         tableName: GLIDE_TABLE_ID,
         columnValues: {
             "KYRQV": JSON.stringify(payload),
-            "ltptW": String(cleanEvents.length)
+            "ltptW": String(cleanEvents.length) 
         }
     };
 
@@ -278,20 +280,35 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
 
 // Event Listeners
 function setupEventListeners() {
-    dropzone.addEventListener('click', () => {
-        if (isGlobalView) {
-            pendingUploadFile = null;
-            openGlobalUploadModal();
-        } else {
-            fileInput.click();
+    
+    document.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        dragOverlay.classList.remove('hidden');
+        void dragOverlay.offsetWidth;
+        dragOverlay.classList.add('active');
+    });
+
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault(); 
+    });
+
+    document.addEventListener('dragleave', (e) => {
+        dragCounter--;
+        if (dragCounter === 0) {
+            dragOverlay.classList.remove('active');
+            setTimeout(() => {
+                if(dragCounter === 0) dragOverlay.classList.add('hidden');
+            }, 200);
         }
     });
 
-    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
-    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-    
-    dropzone.addEventListener('drop', (e) => {
-        e.preventDefault(); dropzone.classList.remove('dragover');
+    document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        dragOverlay.classList.remove('active');
+        dragOverlay.classList.add('hidden');
+        
         if (e.dataTransfer.files.length) {
             if (isGlobalView) {
                 pendingUploadFile = e.dataTransfer.files[0];
@@ -299,6 +316,15 @@ function setupEventListeners() {
             } else {
                 handleFile(e.dataTransfer.files[0], projectNumber, projectTitle);
             }
+        }
+    });
+
+    uploadBtn.addEventListener('click', () => {
+        if (isGlobalView) {
+            pendingUploadFile = null;
+            openGlobalUploadModal();
+        } else {
+            fileInput.click();
         }
     });
 
@@ -909,9 +935,14 @@ function renderCalendar() {
             let isMulti = block.span > 1;
             let gridCol = hasMondayEvents ? block.startCol + 1 : block.startCol;
             
-            // Determine block type from the first segment
             let blockType = block.segments[0].type || 'Work Event';
             let isSpecial = blockType !== 'Work Event';
+
+            if (blockType === 'Delivery') {
+                styleColor = '#F39C12'; // Orange
+            } else if (blockType === 'Inspection') {
+                styleColor = '#E74C3C'; // Red
+            }
 
             let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
             
@@ -951,8 +982,8 @@ function renderCalendar() {
                 return `
                     <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
                         <div class="event-name-wrapper">
-                            <div class="event-name">${ev.name}${globalTag}</div>
                             ${titleIconHtml}
+                            <div class="event-name">${ev.name}${globalTag}</div>
                         </div>
                         ${notesHtml}
                         ${statsHtml}
