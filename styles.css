@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.22 */
-/* Changes: Swapped `.sticky-top-section` background to `#0A0A0A` to perfectly mask scrolling content beneath the day-of-the-week headers. Added `.edit-note-input` text area styling for multi-line daily notes. */
+/* Version: V1.23 */
+/* Changes: Changed stat-circle cursor to pointer. Added inline-stats and inline-edit-input classes for the new inline editing functionality. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -265,7 +265,7 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 
 /* Circular Stats & Type Icons */
 .event-stats, .header-totals { display: flex; flex-direction: row; justify-content: flex-end; align-items: center; gap: 2px; font-size: 0.75rem; font-weight: 600; }
-.stat-circle { display: inline-flex; justify-content: center; align-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid; font-size: 0.7rem; cursor: help;}
+.stat-circle { display: inline-flex; justify-content: center; align-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid; font-size: 0.7rem; cursor: pointer;}
 .accepted-circle { border-color: var(--accepted-color); color: var(--accepted-color); }
 .invited-circle { border-color: var(--invited-color); color: var(--invited-color); }
 
@@ -316,4 +316,28 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     .header { flex-direction: column; align-items: stretch; text-align: center; }
     .header-left, .header-right { flex-direction: column; justify-content: center; }
     .upload-module, .header-action-btn { min-width: 100%; justify-content: center; }
+}
+
+/* Inline Stat Editors */
+.event-stats.inline-stats { gap: 4px; margin-right: 4px; flex-shrink: 0; }
+
+.inline-edit-input {
+    width: 24px;
+    height: 20px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    text-align: center;
+    border: none;
+    border-radius: 10px;
+    background: #FFFFFF;
+    color: #000000;
+    outline: none;
+    -moz-appearance: textfield; /* Hides arrows in Firefox */
+}
+
+/* Hides up/down arrows in Chrome/Safari/Edge */
+.inline-edit-input::-webkit-outer-spin-button,
+.inline-edit-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
