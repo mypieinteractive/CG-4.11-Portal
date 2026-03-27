@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.9
-// Changes: Reverted the bloated date-checking logic from fetchDatabaseData. Fixed setHeaderLoading to properly target the `#header-content` wrapper so the header reliably reappears after the loading sequence completes.
+// Version: V2.10
+// Changes: Conditionally hid header totals on non-work event days. Moved work event counters to the event title wrapper. Added inline editing functionality for invited/accepted counters.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -940,6 +940,7 @@ function renderCalendar() {
             let dateStr = weekDates[i];
             let d = new Date(currentLoopDate); d.setDate(d.getDate() + i);
             let isDayEmpty = !weekEvents.some(e => e.date === dateStr);
+            let hasWorkEvents = weekEvents.some(e => e.date === dateStr && (e.type || 'Work Event') === 'Work Event');
             let isToday = (dateStr === todayStr);
             let bgClasses = `day-bg ${isDayEmpty && !isToday ? 'dimmed-empty' : ''} ${isToday ? 'today-highlight' : ''}`;
             
@@ -952,7 +953,7 @@ function renderCalendar() {
             weekHtml += `
                 <div class="cell-header" style="grid-column: ${gridCol}; grid-row: 1;">
                     <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
-                    ${isDayEmpty ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" title="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" title="Invited">${dayTotals.invited}</span></div>`}
+                    ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" title="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" title="Invited">${dayTotals.invited}</span></div>`}
                 </div>
             `;
         }
@@ -998,21 +999,22 @@ function renderCalendar() {
                 
                 let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
                 let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
+                
                 let statsHtml = showStats ? `
-                    <div class="event-stats">
-                        <span class="stat-circle accepted-circle" title="Accepted">${ev.accepted}</span>
-                        <span class="stat-circle invited-circle" title="Invited">${ev.invited}</span>
+                    <div class="event-stats inline-stats">
+                        <span class="stat-circle accepted-circle" title="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                        <span class="stat-circle invited-circle" title="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                     </div>
                 ` : '';
 
                 return `
                     <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
-                        <div class="event-name-wrapper">
+                        <div class="event-name-wrapper" style="align-items: center;">
                             ${titleIconHtml}
+                            ${statsHtml}
                             <div class="event-name">${ev.name}${globalTag}</div>
                         </div>
                         ${notesHtml}
-                        ${statsHtml}
                     </div>
                 `;
             }).join('');
@@ -1057,5 +1059,52 @@ function renderCalendar() {
         }, 100);
     }
 }
+
+// Inline Editing for Stats
+window.handleInlineEdit = function(e, eventId, field) {
+    e.stopPropagation(); // Prevents opening the edit modal
+    let span = e.currentTarget;
+    if (span.querySelector('input')) return; // Check if already editing
+
+    let currentVal = span.innerText;
+    
+    // Swap text for input
+    span.innerHTML = `<input type="number" class="inline-edit-input" value="${currentVal}" min="0">`;
+    let input = span.querySelector('input');
+    input.focus();
+    input.select();
+
+    let saved = false;
+
+    const saveVal = () => {
+        if (saved) return;
+        saved = true;
+        let newVal = parseInt(input.value) || 0;
+        
+        let ev = eventsData.find(x => x.id === eventId);
+        if (ev) {
+            if (field === 'accepted') ev.accepted = newVal;
+            if (field === 'invited') ev.invited = newVal;
+            
+            // Save to DB and refresh UI so header totals update instantly
+            saveToDatabase(ev.projectId, ev.projectTitle);
+            renderCalendar(); 
+        } else {
+            span.innerHTML = newVal;
+        }
+    };
+
+    // Save on blur (clicking away) or hitting Enter
+    input.addEventListener('blur', saveVal);
+    input.addEventListener('keydown', (keyEvent) => {
+        if (keyEvent.key === 'Enter') {
+            saveVal();
+        }
+        if (keyEvent.key === 'Escape') {
+            saved = true; // Prevents blur from double-firing
+            span.innerHTML = currentVal; // Revert
+        }
+    });
+};
 
 init();
