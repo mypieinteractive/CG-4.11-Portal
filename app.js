@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.7
-// Changes: Modified `setHeaderLoading` to hide the `.header` WITHOUT destroying the `.calendarGrid`, fixing the blank UI bug. Forced the Edit Modal's Daily Stats container to remain visible for Delivery/Inspection/Other events so Notes can be edited. Removed Date selectors for imported events. Updated `saveNewEvent` to assign the primary note only to the first active day of a span.
+// Version: V2.8
+// Changes: Fixed `setHeaderLoading` to properly target the `#header-content` wrapper so that the inline `display: none` is successfully removed when loading finishes, restoring the entire header to view. 
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -78,14 +78,14 @@ function extractProjectNumber() {
 
 function setHeaderLoading(isLoading) {
     const loader = document.getElementById('header-loader');
-    const header = document.querySelector('.header'); // Hide only the buttons header row, leaving calendar intact
+    const content = document.getElementById('header-content'); 
     
     if (isLoading) {
         if(loader) loader.style.display = 'flex';
-        if(header) header.style.display = 'none';
+        if(content) content.style.display = 'none';
     } else {
         if(loader) loader.style.display = 'none';
-        if(header) header.style.display = 'flex';
+        if(content) content.style.display = 'block';
     }
 }
 
@@ -413,7 +413,7 @@ function setupEventListeners() {
         const endGroup = document.getElementById('edit-end-date-group');
         const statsWrapper = document.getElementById('edit-stats-wrapper');
 
-        statsWrapper.style.display = 'block'; // Always visible now to show notes!
+        statsWrapper.style.display = 'block'; 
 
         if (val === 'Work Event') {
             endGroup.style.display = 'flex';
