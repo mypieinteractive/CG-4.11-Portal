@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.3
-// Changes: Hardcoded standard colors for 'Delivery' (Orange) and 'Inspection' (Red) event cards. Swapped HTML layout within `.event-name-wrapper` to place the Type icon strictly to the left of the event title text.
+// Version: V2.6
+// Changes: Implemented robust null checks and ID normalization in `fetchDatabaseData` to permanently resolve the Global crash and Individual load failures. Added `deleteEvent()`. Replaced generic emojis with clean SVG paths for Delivery, Inspection, and Other. Restructured the Edit Modal daily stats generator to include a distinct Notes input for every single day. Hid `#main-title-group` natively in Global mode to reclaim header space.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -10,7 +10,6 @@ const GLIDE_TOKEN = '77804d07-3b60-415c-a8f8-4f84f33b974a';
 // DOM Elements
 const uploadBtn = document.getElementById('upload-btn');
 const fileInput = document.getElementById('file-input');
-const statusIndicator = document.getElementById('status-indicator');
 const lastUpdatedLabel = document.getElementById('last-updated');
 const projectDateRange = document.getElementById('project-date-range');
 const calendarGrid = document.getElementById('calendar-grid');
@@ -36,6 +35,13 @@ let currentProjectFilter = "All";
 let pendingUploadFile = null;
 let dragCounter = 0;
 
+// SVG Icons
+const icons = {
+    delivery: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`,
+    inspection: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><polyline points="7 12.5 10 15.5 16 9.5"></polyline></svg>`,
+    other: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`
+};
+
 // Initialize
 function init() {
     setupEventListeners();
@@ -44,19 +50,13 @@ function init() {
     if (projectNumber) {
         if (projectNumber.toLowerCase() === 'global') {
             isGlobalView = true;
-            document.querySelector('.range-label').style.display = 'none';
-            
-            const header = document.querySelector('.header');
-            const headerLeft = document.querySelector('.header-left');
-            const statusGroup = document.querySelector('.status-group');
-            header.classList.add('global-header-layout');
-            headerLeft.appendChild(statusGroup);
+            const mainTitleGroup = document.getElementById('main-title-group');
+            if(mainTitleGroup) mainTitleGroup.style.display = 'none';
         }
         fetchDatabaseData();
     } else {
         projectDateRange.innerText = `No Project Selected`;
-        setStatus('Add ?project=XYZ to the URL.', 'error');
-        renderCalendar();
+        setHeaderLoading(false);
     }
 }
 
@@ -76,21 +76,23 @@ function extractProjectNumber() {
     projectTitle = extractedTitle || projectNumber;
 }
 
-function setStatus(msg, type = '') {
-    if (!msg) {
-        statusIndicator.style.display = 'none';
+function setHeaderLoading(isLoading) {
+    const loader = document.getElementById('header-loader');
+    const content = document.getElementById('header-content');
+    if (isLoading) {
+        if(loader) loader.style.display = 'flex';
+        if(content) content.style.display = 'none';
+        calendarGrid.innerHTML = '';
     } else {
-        statusIndicator.style.display = 'block';
-        statusIndicator.innerText = msg;
-        statusIndicator.className = `status ${type}`;
+        if(loader) loader.style.display = 'none';
+        if(content) content.style.display = 'block';
     }
 }
 
 // Database Communication (Glide v2 API)
 async function fetchDatabaseData() {
-    document.querySelector('.header-right').classList.add('loading-state');
+    setHeaderLoading(true);
     lastUpdatedLabel.style.display = 'none';
-    setStatus('Loading Data...');
     
     try {
         const response = await fetch('https://api.glideapp.io/api/function/queryTables', {
@@ -104,8 +106,15 @@ async function fetchDatabaseData() {
                 queries: [{ tableName: GLIDE_TABLE_ID }]
             })
         });
+
+        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
         
         const result = await response.json();
+        
+        if (!result || !result[0]) {
+            throw new Error("Invalid API Response");
+        }
+
         const rows = result[0]?.rows || [];
         
         eventsData = [];
@@ -140,14 +149,18 @@ async function fetchDatabaseData() {
                     let parsed = JSON.parse(rawJson);
                     let evs = Array.isArray(parsed) ? parsed : (parsed.eventsData || []);
                     
-                    if (isGlobalView || String(pid) === String(projectNumber)) {
+                    // Strict ID match to prevent filtering out correct data
+                    if (isGlobalView || String(pid).trim() === String(projectNumber).trim()) {
                         evs.forEach(ev => {
-                            ev.projectId = pid;
-                            ev.projectTitle = ptitle;
-                            eventsData.push(ev);
+                            // Valid Date Quarantine Check
+                            if(ev.date && !isNaN(new Date(ev.date).getTime())) {
+                                ev.projectId = pid;
+                                ev.projectTitle = ptitle;
+                                eventsData.push(ev);
+                            }
                         });
 
-                        if (!isGlobalView && String(pid) === String(projectNumber)) {
+                        if (!isGlobalView) {
                             lastUpdatedDate = parsed.lastUpdated || "Recent";
                         }
                     }
@@ -163,23 +176,20 @@ async function fetchDatabaseData() {
 
         if(eventsData.length > 0) {
             eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
-            
-            setStatus(''); 
             if (isGlobalView) lastUpdatedDate = "Recent";
             lastUpdatedLabel.style.display = 'block';
             lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
         } else {
-            setStatus('No events found.');
             lastUpdatedLabel.style.display = 'none';
         }
         
-        document.querySelector('.header-right').classList.remove('loading-state');
+        setHeaderLoading(false);
         renderCalendar();
     } catch (error) {
         console.error('Fetch Error:', error);
-        document.querySelector('.header-right').classList.remove('loading-state');
-        setStatus('Error loading database.', 'error');
+        setHeaderLoading(false);
         lastUpdatedLabel.style.display = 'none';
+        projectDateRange.innerText = "Error Loading Database";
         renderCalendar();
     }
 }
@@ -189,6 +199,8 @@ function populateProjectDropdowns() {
     const addSel = document.getElementById('add-project');
     const upSel = document.getElementById('upload-project-select');
 
+    if(!filter) return;
+
     let opts = '';
     projectsList.forEach(p => {
         opts += `<option value="${p.id}">${p.title}</option>`;
@@ -197,7 +209,7 @@ function populateProjectDropdowns() {
     if (isGlobalView) {
         filter.style.display = 'flex';
         filter.innerHTML = `<option value="All">All Projects</option>` + opts;
-        addSel.innerHTML = opts;
+        if(addSel) addSel.innerHTML = opts;
         if(upSel) upSel.innerHTML = opts;
     }
 }
@@ -205,9 +217,7 @@ function populateProjectDropdowns() {
 async function saveToDatabase(targetId = projectNumber, targetTitle = projectTitle) {
     if (!targetId || targetId.toLowerCase() === 'global') return;
     
-    document.querySelector('.header-right').classList.add('loading-state');
-    lastUpdatedLabel.style.display = 'none';
-    setStatus('Saving Data...');
+    setHeaderLoading(true);
     
     const now = new Date();
     lastUpdatedDate = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear().toString().slice(-2)}`;
@@ -262,18 +272,16 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
                 projectRowIds[String(targetId)] = result[0].rowIDs[0];
             }
 
-            setStatus('');
             lastUpdatedLabel.style.display = 'block';
             lastUpdatedLabel.innerText = `Last Updated: ${lastUpdatedDate}`;
         } else {
             throw new Error('API Mutation Failed');
         }
         
-        document.querySelector('.header-right').classList.remove('loading-state');
+        setHeaderLoading(false);
     } catch (error) {
         console.error('Save Error:', error);
-        document.querySelector('.header-right').classList.remove('loading-state');
-        setStatus('Failed to save to database.', 'error');
+        setHeaderLoading(false);
         lastUpdatedLabel.style.display = 'none';
     }
 }
@@ -455,9 +463,7 @@ window.confirmGlobalUpload = function() {
 
 // File Processing
 function handleFile(file, pId, pTitle) {
-    document.querySelector('.header-right').classList.add('loading-state');
-    lastUpdatedLabel.style.display = 'none';
-    setStatus('Parsing file...');
+    setHeaderLoading(true);
     
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -601,19 +607,21 @@ function openEditModal(eventId) {
 
     document.getElementById('edit-title').innerText = ev.name + (isGlobalView ? ` (${ev.projectTitle})` : '');
     document.getElementById('edit-old-name').value = ev.name;
-    document.getElementById('edit-notes').value = ev.notes || '';
     
     const typeGroup = document.getElementById('edit-type-group');
     const importedNote = document.getElementById('edit-imported-note');
+    const deleteBtn = document.getElementById('delete-btn');
     const typeSelect = document.getElementById('edit-type');
     
     if (ev.imported) {
         typeGroup.style.display = 'none';
         importedNote.style.display = 'flex';
+        deleteBtn.style.display = 'none';
         typeSelect.value = 'Work Event';
     } else {
         typeGroup.style.display = 'flex';
         importedNote.style.display = 'none';
+        deleteBtn.style.display = 'block';
         typeSelect.value = ev.type || 'Work Event';
     }
 
@@ -652,18 +660,23 @@ function renderEditStats(startStr, endStr) {
             let existing = editRelatedEvents.find(e => e.date === dStr);
             let inv = existing ? existing.invited : 0;
             let acc = existing ? existing.accepted : 0;
+            let note = existing && existing.notes ? existing.notes : '';
             
+            // Generate a row with specific note binding
             container.innerHTML += `
-                <div class="form-row daily-stat-row" data-date="${dStr}">
-                    <div class="stat-date-label">${current.getMonth()+1}/${current.getDate()}</div>
-                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
-                        <label>I:</label>
-                        <input type="number" class="edit-inv-input" value="${inv}" min="0" style="padding: 5px;">
+                <div class="daily-stat-row" data-date="${dStr}">
+                    <div class="daily-stat-row-top">
+                        <div class="stat-date-label">${current.getMonth()+1}/${current.getDate()}</div>
+                        <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
+                            <label>I:</label>
+                            <input type="number" class="edit-inv-input" value="${inv}" min="0" style="padding: 5px;">
+                        </div>
+                        <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
+                            <label>A:</label>
+                            <input type="number" class="edit-acc-input" value="${acc}" min="0" style="padding: 5px;">
+                        </div>
                     </div>
-                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
-                        <label>A:</label>
-                        <input type="number" class="edit-acc-input" value="${acc}" min="0" style="padding: 5px;">
-                    </div>
+                    <input type="text" class="edit-note-input" value="${note}" placeholder="Notes for this day...">
                 </div>
             `;
         }
@@ -677,20 +690,21 @@ function updateRelatedEventsFromDOM() {
         let dStr = row.getAttribute('data-date');
         let inv = parseInt(row.querySelector('.edit-inv-input').value) || 0;
         let acc = parseInt(row.querySelector('.edit-acc-input').value) || 0;
+        let note = row.querySelector('.edit-note-input').value.trim();
         
         let existing = editRelatedEvents.find(e => e.date === dStr);
         if (existing) {
             existing.invited = inv;
             existing.accepted = acc;
+            existing.notes = note;
         } else {
-            editRelatedEvents.push({ date: dStr, invited: inv, accepted: acc });
+            editRelatedEvents.push({ date: dStr, invited: inv, accepted: acc, notes: note });
         }
     });
 }
 
 function saveEditedEvent() {
     const oldName = document.getElementById('edit-old-name').value;
-    const newNotes = document.getElementById('edit-notes').value.trim();
     const eventType = document.getElementById('edit-type').value;
     const isImported = editRelatedEvents[0] ? editRelatedEvents[0].imported : false;
     const pId = editRelatedEvents[0].projectId;
@@ -723,7 +737,7 @@ function saveEditedEvent() {
                 date: dStr,
                 invited: (isWorkEvent && stat) ? stat.invited : 0,
                 accepted: (isWorkEvent && stat) ? stat.accepted : 0,
-                notes: newNotes,
+                notes: stat ? stat.notes : "",
                 type: eventType,
                 imported: isImported,
                 projectId: pId,
@@ -735,6 +749,20 @@ function saveEditedEvent() {
     
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
     closeModals(); renderCalendar(); saveToDatabase(pId, pTitle);
+}
+
+window.deleteEvent = function() {
+    if (!confirm("Are you sure you want to permanently delete this event?")) return;
+    
+    const oldName = document.getElementById('edit-old-name').value;
+    const pId = editRelatedEvents[0].projectId;
+    const pTitle = editRelatedEvents[0].projectTitle;
+    
+    eventsData = eventsData.filter(e => !(e.name === oldName && e.projectId === pId));
+    
+    closeModals();
+    renderCalendar();
+    saveToDatabase(pId, pTitle);
 }
 
 function closeModals() {
@@ -763,10 +791,6 @@ function renderCalendar() {
     const gridHeaders = document.querySelector('.grid-headers');
     gridHeaders.innerHTML = '';
     
-    if (isGlobalView) {
-        projectDateRange.innerText = "All Projects";
-    }
-
     let displayEvents = eventsData;
     if (currentTypeFilter !== "All") {
         displayEvents = displayEvents.filter(e => (e.type || 'Work Event') === currentTypeFilter);
@@ -960,17 +984,15 @@ function renderCalendar() {
                 let segmentStyle = (isMulti && idx < block.span - 1) ? `border-right: 1px dashed rgba(255,255,255,0.15);` : '';
                 
                 const evType = ev.type || 'Work Event';
-                let titleIcon = '';
+                let titleIconHtml = '';
                 let showStats = false;
                 
-                if (evType === 'Delivery') titleIcon = '🚚';
-                else if (evType === 'Inspection') titleIcon = '🏷️✅';
-                else if (evType === 'Other') titleIcon = '📅';
+                if (evType === 'Delivery') titleIconHtml = `<div class="type-icon" title="${evType}">${icons.delivery}</div>`;
+                else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon" title="${evType}">${icons.inspection}</div>`;
+                else if (evType === 'Other') titleIconHtml = `<div class="type-icon" title="${evType}">${icons.other}</div>`;
                 else showStats = true;
                 
-                let titleIconHtml = titleIcon ? `<span class="type-icon" title="${evType}">${titleIcon}</span>` : '';
                 let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
-
                 let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
                 let statsHtml = showStats ? `
                     <div class="event-stats">
