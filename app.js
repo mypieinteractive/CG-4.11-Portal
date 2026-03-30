@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.14
-// Changes: Added a `processedEventIds` Set to the processData function to track which events are present in a fresh file upload. Added a cleanup filter to remove any imported events for the current project that are no longer present in the newly uploaded file, preventing "ghost" days from lingering.
+// Version: V2.15
+// Changes: Replaced binary toggle logic with a 3-way currentViewState state loop (notes -> minimized -> events). Configured fetchDatabaseData to render the literal 'Last Import: [date]' text in the header.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -34,6 +34,7 @@ let currentTypeFilter = "All";
 let currentProjectFilter = "All";
 let pendingUploadFile = null;
 let dragCounter = 0;
+let currentViewState = 'notes'; // 'notes', 'minimized', 'events'
 
 // Sleek Theme SVG Icons
 const icons = {
@@ -159,12 +160,18 @@ async function fetchDatabaseData() {
                         });
 
                         if (!isGlobalView) {
-                            lastUpdatedDate = parsed.lastUpdated || "Recent";
+                            lastUpdatedDate = parsed.lastUpdated || "";
                         }
                     }
                 } catch(e) { console.error('JSON Parse Error for project', pid); }
             }
         });
+
+        if (!isGlobalView && lastUpdatedDate) {
+            document.getElementById('last-updated').innerText = `Last Import: ${lastUpdatedDate}`;
+        } else {
+            document.getElementById('last-updated').innerText = '';
+        }
 
         if (!isGlobalView && !projectsList.find(p => p.id === projectNumber)) {
             projectsList.push({ id: projectNumber, title: projectTitle });
@@ -262,6 +269,10 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
             if (!existingRowId && result[0]?.rowIDs?.length > 0) {
                 projectRowIds[String(targetId)] = result[0].rowIDs[0];
             }
+            if (!isGlobalView) {
+                lastUpdatedDate = lastUpdatedStr;
+                document.getElementById('last-updated').innerText = `Last Import: ${lastUpdatedDate}`;
+            }
         } else {
             throw new Error('API Mutation Failed');
         }
@@ -337,12 +348,22 @@ function setupEventListeners() {
     const collapseBtn = document.getElementById('collapse-btn');
     if (collapseBtn) {
         collapseBtn.addEventListener('click', function() {
-            calendarGrid.classList.toggle('collapsed-view');
-            const isCollapsed = calendarGrid.classList.contains('collapsed-view');
-            if (isCollapsed) {
-                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> Expand Events`;
+            
+            if (currentViewState === 'notes') {
+                currentViewState = 'minimized';
+                calendarGrid.classList.remove('view-events', 'view-notes');
+                calendarGrid.classList.add('view-minimized');
+                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> <span>Show Events</span>`;
+            } else if (currentViewState === 'minimized') {
+                currentViewState = 'events';
+                calendarGrid.classList.remove('view-minimized', 'view-notes');
+                calendarGrid.classList.add('view-events');
+                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> <span>Show Notes</span>`;
             } else {
-                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> Collapse Events`;
+                currentViewState = 'notes';
+                calendarGrid.classList.remove('view-minimized', 'view-events');
+                calendarGrid.classList.add('view-notes');
+                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> <span>Minimize</span>`;
             }
 
             setTimeout(() => {
@@ -469,7 +490,7 @@ function handleFile(file, pId, pTitle) {
 }
 
 function processData(data, pId, pTitle) {
-    let processedEventIds = new Set(); // Track which events are actively in this fresh import
+    let processedEventIds = new Set(); 
 
     for (let i = 1; i < data.length; i++) {
         const row = data[i];
@@ -503,7 +524,7 @@ function processData(data, pId, pTitle) {
             eventsData[existingIndex].accepted = accepted;
             eventsData[existingIndex].type = 'Work Event'; 
             eventsData[existingIndex].imported = true;
-            processedEventIds.add(eventsData[existingIndex].id); // Mark as verified
+            processedEventIds.add(eventsData[existingIndex].id); 
         } else {
             let newId = generateId();
             eventsData.push({
@@ -514,15 +535,14 @@ function processData(data, pId, pTitle) {
                 projectId: pId,
                 projectTitle: pTitle
             });
-            processedEventIds.add(newId); // Mark as verified
+            processedEventIds.add(newId); 
         }
     }
     
-    // Cleanup: Remove any imported events for this specific project that were NOT in the new file
     eventsData = eventsData.filter(ev => {
-        if (ev.projectId !== pId) return true; // Keep events from other projects
-        if (!ev.imported) return true; // Keep manually added events
-        return processedEventIds.has(ev.id); // If imported and matches pId, it MUST be in the fresh file
+        if (ev.projectId !== pId) return true; 
+        if (!ev.imported) return true; 
+        return processedEventIds.has(ev.id); 
     });
 
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -622,7 +642,6 @@ function openEditModal(eventId) {
     const startDateGroup = document.getElementById('edit-start-date').closest('.form-group');
     const endDateGroup = document.getElementById('edit-end-date-group');
     
-    // Dispatch type change FIRST so it doesn't override the manual visibility overrides below
     typeSelect.value = ev.type || 'Work Event';
     typeSelect.dispatchEvent(new Event('change')); 
     
@@ -646,7 +665,6 @@ function openEditModal(eventId) {
     let startStr = editRelatedEvents[0].date;
     let endStr = editRelatedEvents[editRelatedEvents.length - 1].date;
     
-    // Pass the clicked segment's date for highlighting
     renderEditStats(startStr, endStr, ev.date);
 
     modalOverlay.classList.remove('hidden');
@@ -666,7 +684,6 @@ function renderEditStats(startStr, endStr, highlightDate = null) {
     const showStats = evType === 'Work Event';
 
     if (isImported) {
-        // FOR IMPORTED EVENTS: Only render rows for dates that actually exist in the data to preserve gaps
         editRelatedEvents.forEach(existing => {
             let dStr = existing.date;
             let current = new Date(dStr + 'T00:00:00');
@@ -699,7 +716,6 @@ function renderEditStats(startStr, endStr, highlightDate = null) {
             `;
         });
     } else {
-        // FOR MANUAL EVENTS: Loop from start to end and show all contiguous days
         let start = new Date(startStr + 'T00:00:00');
         let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
         if (end < start) end = new Date(start);
@@ -785,13 +801,11 @@ function saveEditedEvent() {
     
     updateRelatedEventsFromDOM(); 
     
-    // Wipe out the old events across all linked days
     eventsData = eventsData.filter(e => !(e.name === oldName && e.projectId === pId));
     
     const isWorkEvent = eventType === 'Work Event';
 
     if (isImported) {
-        // FOR IMPORTED EVENTS: Only save back the dates that we know exist, preserving gaps
         editRelatedEvents.forEach(stat => {
             eventsData.push({
                 id: generateId(),
@@ -807,7 +821,6 @@ function saveEditedEvent() {
             });
         });
     } else {
-        // FOR MANUAL EVENTS: Loop start to end to enforce a contiguous block
         const startStr = document.getElementById('edit-start-date').value;
         const endStr = document.getElementById('edit-end-date').value;
         
@@ -1068,12 +1081,6 @@ function renderCalendar() {
             let blockType = block.segments[0].type || 'Work Event';
             let isSpecial = blockType !== 'Work Event';
 
-            if (blockType === 'Delivery') {
-                styleColor = '#F39C12'; 
-            } else if (blockType === 'Inspection') {
-                styleColor = '#E74C3C'; 
-            }
-
             let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
             
             if (isSpecial) {
@@ -1150,7 +1157,7 @@ function renderCalendar() {
     htmlStr += `<div class="calendar-bottom-padding"></div>`;
     calendarGrid.innerHTML = htmlStr;
 
-    if (showLookAhead && !calendarGrid.classList.contains('collapsed-view')) {
+    if (!calendarGrid.classList.contains('view-minimized') && showLookAhead) {
         setTimeout(() => {
             const target = document.getElementById('current-week-scroll-target');
             const stickyHeader = document.querySelector('.sticky-top-section');
