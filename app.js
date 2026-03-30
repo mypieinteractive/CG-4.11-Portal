@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.13
-// Changes: Modified renderEditStats and saveEditedEvent to strictly preserve gap days for imported events. Imported events no longer automatically fill empty days between their start and end dates when edited.
+// Version: V2.14
+// Changes: Added a `processedEventIds` Set to the processData function to track which events are present in a fresh file upload. Added a cleanup filter to remove any imported events for the current project that are no longer present in the newly uploaded file, preventing "ghost" days from lingering.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -469,6 +469,8 @@ function handleFile(file, pId, pTitle) {
 }
 
 function processData(data, pId, pTitle) {
+    let processedEventIds = new Set(); // Track which events are actively in this fresh import
+
     for (let i = 1; i < data.length; i++) {
         const row = data[i];
         if (!row || row.length === 0) continue;
@@ -501,17 +503,28 @@ function processData(data, pId, pTitle) {
             eventsData[existingIndex].accepted = accepted;
             eventsData[existingIndex].type = 'Work Event'; 
             eventsData[existingIndex].imported = true;
+            processedEventIds.add(eventsData[existingIndex].id); // Mark as verified
         } else {
+            let newId = generateId();
             eventsData.push({
-                id: generateId(), name: eventName, date: dateStr,
+                id: newId, name: eventName, date: dateStr,
                 invited: invited, accepted: accepted, notes: "",
                 type: 'Work Event',
                 imported: true,
                 projectId: pId,
                 projectTitle: pTitle
             });
+            processedEventIds.add(newId); // Mark as verified
         }
     }
+    
+    // Cleanup: Remove any imported events for this specific project that were NOT in the new file
+    eventsData = eventsData.filter(ev => {
+        if (ev.projectId !== pId) return true; // Keep events from other projects
+        if (!ev.imported) return true; // Keep manually added events
+        return processedEventIds.has(ev.id); // If imported and matches pId, it MUST be in the fresh file
+    });
+
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
