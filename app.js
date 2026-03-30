@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.15
-// Changes: Replaced binary toggle logic with a 3-way currentViewState state loop (notes -> minimized -> events). Configured fetchDatabaseData to render the literal 'Last Import: [date]' text in the header.
+// Version: V2.16
+// Changes: Replaced the direct tooltip mapping on the .event-name node to a new wrapper div (.event-name-target). This decouples the tooltip bounds from the overflow-hidden properties used to truncate the title, fixing the clipping issue. 
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -1122,7 +1122,9 @@ function renderCalendar() {
                         <div class="event-name-wrapper" style="align-items: center;">
                             ${titleIconHtml}
                             ${statsHtml}
-                            <div class="event-name" data-tooltip="${safeName}">${ev.name}${globalTag}</div>
+                            <div class="event-name-target" data-tooltip="${safeName}">
+                                <div class="event-name">${ev.name}${globalTag}</div>
+                            </div>
                         </div>
                         ${notesHtml}
                     </div>
