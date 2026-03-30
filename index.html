@@ -22,8 +22,8 @@
                     <header class="header">
                         <div class="header-left" id="main-title-group">
                             <div class="title-group">
-                                <div class="range-label">Range of Events:</div>
-                                <h1 id="project-date-range"></h1>
+                                <h1 id="main-project-title">Loading Project...</h1>
+                                <div class="range-label" id="project-date-range">Calculating dates...</div>
                             </div>
                         </div>
                         
@@ -32,11 +32,11 @@
                                 <div id="last-updated" class="last-updated"></div>
                             </div>
                             
-                            <select id="project-filter" class="header-action-btn" title="Filter by Project" style="display: none;">
+                            <select id="project-filter" class="header-action-btn" data-tooltip="Filter by Project" style="display: none;">
                                 <option value="All">All Projects</option>
                             </select>
 
-                            <select id="event-type-filter" class="header-action-btn" title="Filter by Event Type">
+                            <select id="event-type-filter" class="header-action-btn" data-tooltip="Filter by Event Type">
                                 <option value="All">All Types</option>
                                 <option value="Work Event">Work Events</option>
                                 <option value="Delivery">Deliveries</option>
@@ -49,13 +49,13 @@
                                 Collapse Events
                             </button>
 
-                            <button class="upload-module" id="upload-btn" title="Upload Events">
+                            <button class="upload-module" id="upload-btn" data-tooltip="Upload Events">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                                 <span>Upload XLSX</span>
                                 <input type="file" id="file-input" accept=".xlsx, .xls, .csv" hidden>
                             </button>
 
-                            <button class="global-add-btn" onclick="openAddModal()" title="Add Event">
+                            <button class="global-add-btn" onclick="openAddModal()" data-tooltip="Add Event">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             </button>
                         </div>
@@ -146,6 +146,11 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="edit-old-name">
+                
+                <div class="form-group" id="edit-name-group">
+                    <label>Event Name</label>
+                    <input type="text" id="edit-name">
+                </div>
                 
                 <div class="form-group" id="edit-type-group">
                     <label>Event Type</label>
