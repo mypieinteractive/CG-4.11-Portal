@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.11
-// Changes: Limited Event title to two lines with hover title. Passed clicked segment date to openEditModal for highlighting row focus. Moved modal field visibility logic to execute after the type 'change' event dispatch to ensure imported events accurately hide Start/End dates.
+// Version: V2.12
+// Changes: Changed UI elements to use `data-tooltip` for instant hover effects. Called renderCalendar() within saveToDatabase to fix the blank screen bug. Connected the dynamic Project Title to the header and allowed non-imported events to rename their titles inside the edit modal.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -85,7 +85,7 @@ function setHeaderLoading(isLoading) {
     if (isLoading) {
         if(loader) loader.style.display = 'flex';
         if(content) content.style.display = 'none';
-        calendarGrid.innerHTML = '';
+        calendarGrid.innerHTML = ''; // Forces a redraw boundary
     } else {
         if(loader) loader.style.display = 'none';
         if(content) content.style.display = 'block';
@@ -267,9 +267,11 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
         }
         
         setHeaderLoading(false);
+        renderCalendar(); // Redraw immediately so screen doesn't stay blank
     } catch (error) {
         console.error('Save Error:', error);
         setHeaderLoading(false);
+        renderCalendar();
     }
 }
 
@@ -597,7 +599,9 @@ function openEditModal(eventId) {
 
     document.getElementById('edit-title').innerText = ev.name + (isGlobalView ? ` (${ev.projectTitle})` : '');
     document.getElementById('edit-old-name').value = ev.name;
+    document.getElementById('edit-name').value = ev.name;
     
+    const nameGroup = document.getElementById('edit-name-group');
     const typeGroup = document.getElementById('edit-type-group');
     const importedNote = document.getElementById('edit-imported-note');
     const deleteBtn = document.getElementById('delete-btn');
@@ -610,12 +614,14 @@ function openEditModal(eventId) {
     typeSelect.dispatchEvent(new Event('change')); 
     
     if (ev.imported) {
+        if(nameGroup) nameGroup.style.display = 'none';
         typeGroup.style.display = 'none';
         importedNote.style.display = 'flex';
         deleteBtn.style.display = 'none';
         startDateGroup.style.display = 'none';
         endDateGroup.style.display = 'none';
     } else {
+        if(nameGroup) nameGroup.style.display = 'flex';
         typeGroup.style.display = 'flex';
         importedNote.style.display = 'none';
         deleteBtn.style.display = 'block';
@@ -721,13 +727,19 @@ function updateRelatedEventsFromDOM() {
 
 function saveEditedEvent() {
     const oldName = document.getElementById('edit-old-name').value;
+    let newName = document.getElementById('edit-name').value.trim();
     const eventType = document.getElementById('edit-type').value;
     const isImported = editRelatedEvents[0] ? editRelatedEvents[0].imported : false;
     const pId = editRelatedEvents[0].projectId;
     const pTitle = editRelatedEvents[0].projectTitle;
+
+    // Safety fallback: prevent renamed imported events
+    if (isImported) newName = oldName;
+    if (!newName) return alert("Event name cannot be empty.");
     
     updateRelatedEventsFromDOM(); 
     
+    // Wipe out the old events across all linked days
     eventsData = eventsData.filter(e => !(e.name === oldName && e.projectId === pId));
     
     const startStr = document.getElementById('edit-start-date').value;
@@ -749,7 +761,7 @@ function saveEditedEvent() {
             
             eventsData.push({
                 id: generateId(),
-                name: oldName,
+                name: newName,
                 date: dStr,
                 invited: (isWorkEvent && stat) ? stat.invited : 0,
                 accepted: (isWorkEvent && stat) ? stat.accepted : 0,
@@ -764,7 +776,9 @@ function saveEditedEvent() {
     }
     
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
-    closeModals(); renderCalendar(); saveToDatabase(pId, pTitle);
+    closeModals(); 
+    renderCalendar(); 
+    saveToDatabase(pId, pTitle);
 }
 
 window.deleteEvent = function() {
@@ -806,6 +820,11 @@ function renderCalendar() {
     calendarGrid.innerHTML = '';
     const gridHeaders = document.querySelector('.grid-headers');
     gridHeaders.innerHTML = '';
+
+    const mainProjTitle = document.getElementById('main-project-title');
+    if (mainProjTitle) {
+        mainProjTitle.innerText = isGlobalView ? "All Projects" : (projectTitle || projectNumber || "Unnamed Project");
+    }
 
     let displayEvents = eventsData;
     if (currentTypeFilter !== "All") {
@@ -868,6 +887,8 @@ function renderCalendar() {
 
     if (!isGlobalView) {
         projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    } else {
+        projectDateRange.innerText = "Global Overview";
     }
 
     let currentLoopDate = new Date(startOfGrid);
@@ -968,7 +989,7 @@ function renderCalendar() {
             weekHtml += `
                 <div class="cell-header" style="grid-column: ${gridCol}; grid-row: 1;">
                     <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
-                    ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" title="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" title="Invited">${dayTotals.invited}</span></div>`}
+                    ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" data-tooltip="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" data-tooltip="Invited">${dayTotals.invited}</span></div>`}
                 </div>
             `;
         }
@@ -1007,9 +1028,9 @@ function renderCalendar() {
                 let titleIconHtml = '';
                 let showStats = false;
                 
-                if (evType === 'Delivery') titleIconHtml = `<div class="type-icon" title="${evType}">${icons.delivery}</div>`;
-                else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon" title="${evType}">${icons.inspection}</div>`;
-                else if (evType === 'Other') titleIconHtml = `<div class="type-icon" title="${evType}">${icons.other}</div>`;
+                if (evType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.delivery}</div>`;
+                else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.inspection}</div>`;
+                else if (evType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.other}</div>`;
                 else showStats = true;
                 
                 let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
@@ -1017,8 +1038,8 @@ function renderCalendar() {
                 
                 let statsHtml = showStats ? `
                     <div class="event-stats inline-stats">
-                        <span class="stat-circle accepted-circle" title="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                        <span class="stat-circle invited-circle" title="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                        <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                        <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                     </div>
                 ` : '';
 
@@ -1029,7 +1050,7 @@ function renderCalendar() {
                         <div class="event-name-wrapper" style="align-items: center;">
                             ${titleIconHtml}
                             ${statsHtml}
-                            <div class="event-name" title="${safeName}">${ev.name}${globalTag}</div>
+                            <div class="event-name" data-tooltip="${safeName}">${ev.name}${globalTag}</div>
                         </div>
                         ${notesHtml}
                     </div>
