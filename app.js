@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.12
-// Changes: Changed UI elements to use `data-tooltip` for instant hover effects. Called renderCalendar() within saveToDatabase to fix the blank screen bug. Connected the dynamic Project Title to the header and allowed non-imported events to rename their titles inside the edit modal.
+// Version: V2.13
+// Changes: Modified renderEditStats and saveEditedEvent to strictly preserve gap days for imported events. Imported events no longer automatically fill empty days between their start and end dates when edited.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -633,9 +633,6 @@ function openEditModal(eventId) {
     let startStr = editRelatedEvents[0].date;
     let endStr = editRelatedEvents[editRelatedEvents.length - 1].date;
     
-    document.getElementById('edit-start-date').value = startStr;
-    document.getElementById('edit-end-date').value = endStr;
-    
     // Pass the clicked segment's date for highlighting
     renderEditStats(startStr, endStr, ev.date);
 
@@ -651,21 +648,18 @@ function renderEditStats(startStr, endStr, highlightDate = null) {
     
     if (!startStr) return;
     
-    let start = new Date(startStr + 'T00:00:00');
-    let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
-    if (end < start) end = new Date(start);
-    
+    const isImported = editRelatedEvents.length > 0 && editRelatedEvents[0].imported;
     const evType = document.getElementById('edit-type').value;
     const showStats = evType === 'Work Event';
 
-    let current = new Date(start);
-    while (current <= end) {
-        if (current.getDay() !== 0) {
-            let dStr = formatDateObj(current);
-            let existing = editRelatedEvents.find(e => e.date === dStr);
-            let inv = existing ? existing.invited : 0;
-            let acc = existing ? existing.accepted : 0;
-            let note = existing && existing.notes ? existing.notes : '';
+    if (isImported) {
+        // FOR IMPORTED EVENTS: Only render rows for dates that actually exist in the data to preserve gaps
+        editRelatedEvents.forEach(existing => {
+            let dStr = existing.date;
+            let current = new Date(dStr + 'T00:00:00');
+            let inv = existing.invited || 0;
+            let acc = existing.accepted || 0;
+            let note = existing.notes || '';
             
             let statsHtml = showStats ? `
                 <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
@@ -690,8 +684,48 @@ function renderEditStats(startStr, endStr, highlightDate = null) {
                     <textarea class="edit-note-input" rows="2" placeholder="Notes for this day...">${note}</textarea>
                 </div>
             `;
+        });
+    } else {
+        // FOR MANUAL EVENTS: Loop from start to end and show all contiguous days
+        let start = new Date(startStr + 'T00:00:00');
+        let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
+        if (end < start) end = new Date(start);
+        
+        let current = new Date(start);
+        while (current <= end) {
+            if (current.getDay() !== 0) {
+                let dStr = formatDateObj(current);
+                let existing = editRelatedEvents.find(e => e.date === dStr);
+                let inv = existing ? existing.invited : 0;
+                let acc = existing ? existing.accepted : 0;
+                let note = existing && existing.notes ? existing.notes : '';
+                
+                let statsHtml = showStats ? `
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
+                        <label>I:</label>
+                        <input type="number" class="edit-inv-input" value="${inv}" min="0" style="padding: 5px;">
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
+                        <label>A:</label>
+                        <input type="number" class="edit-acc-input" value="${acc}" min="0" style="padding: 5px;">
+                    </div>
+                ` : `<input type="hidden" class="edit-inv-input" value="0"><input type="hidden" class="edit-acc-input" value="0">`;
+
+                let isHighlighted = (dStr === highlightDate);
+                let rowClass = isHighlighted ? 'daily-stat-row highlighted-row' : 'daily-stat-row';
+
+                container.innerHTML += `
+                    <div class="${rowClass}" data-date="${dStr}">
+                        <div class="daily-stat-row-top">
+                            <div class="stat-date-label">${current.getMonth()+1}/${current.getDate()}</div>
+                            ${statsHtml}
+                        </div>
+                        <textarea class="edit-note-input" rows="2" placeholder="Notes for this day...">${note}</textarea>
+                    </div>
+                `;
+            }
+            current.setDate(current.getDate() + 1);
         }
-        current.setDate(current.getDate() + 1);
     }
 
     if (highlightDate) {
@@ -733,7 +767,6 @@ function saveEditedEvent() {
     const pId = editRelatedEvents[0].projectId;
     const pTitle = editRelatedEvents[0].projectTitle;
 
-    // Safety fallback: prevent renamed imported events
     if (isImported) newName = oldName;
     if (!newName) return alert("Event name cannot be empty.");
     
@@ -742,37 +775,56 @@ function saveEditedEvent() {
     // Wipe out the old events across all linked days
     eventsData = eventsData.filter(e => !(e.name === oldName && e.projectId === pId));
     
-    const startStr = document.getElementById('edit-start-date').value;
-    const endStr = document.getElementById('edit-end-date').value;
-    
-    let start = new Date(startStr + 'T00:00:00');
-    let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
-    if (end < start || eventType === 'Delivery' || eventType === 'Inspection') {
-        end = new Date(start);
-    }
-    
-    let current = new Date(start);
     const isWorkEvent = eventType === 'Work Event';
 
-    while (current <= end) {
-        if (current.getDay() !== 0) {
-            let dStr = formatDateObj(current);
-            let stat = editRelatedEvents.find(e => e.date === dStr);
-            
+    if (isImported) {
+        // FOR IMPORTED EVENTS: Only save back the dates that we know exist, preserving gaps
+        editRelatedEvents.forEach(stat => {
             eventsData.push({
                 id: generateId(),
                 name: newName,
-                date: dStr,
-                invited: (isWorkEvent && stat) ? stat.invited : 0,
-                accepted: (isWorkEvent && stat) ? stat.accepted : 0,
-                notes: stat ? stat.notes : "",
+                date: stat.date,
+                invited: isWorkEvent ? stat.invited : 0,
+                accepted: isWorkEvent ? stat.accepted : 0,
+                notes: stat.notes || "",
                 type: eventType,
-                imported: isImported,
+                imported: true,
                 projectId: pId,
                 projectTitle: pTitle
             });
+        });
+    } else {
+        // FOR MANUAL EVENTS: Loop start to end to enforce a contiguous block
+        const startStr = document.getElementById('edit-start-date').value;
+        const endStr = document.getElementById('edit-end-date').value;
+        
+        let start = new Date(startStr + 'T00:00:00');
+        let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
+        if (end < start || eventType === 'Delivery' || eventType === 'Inspection') {
+            end = new Date(start);
         }
-        current.setDate(current.getDate() + 1);
+        
+        let current = new Date(start);
+        while (current <= end) {
+            if (current.getDay() !== 0) {
+                let dStr = formatDateObj(current);
+                let stat = editRelatedEvents.find(e => e.date === dStr);
+                
+                eventsData.push({
+                    id: generateId(),
+                    name: newName,
+                    date: dStr,
+                    invited: (isWorkEvent && stat) ? stat.invited : 0,
+                    accepted: (isWorkEvent && stat) ? stat.accepted : 0,
+                    notes: stat ? stat.notes : "",
+                    type: eventType,
+                    imported: false,
+                    projectId: pId,
+                    projectTitle: pTitle
+                });
+            }
+            current.setDate(current.getDate() + 1);
+        }
     }
     
     eventsData.sort((a, b) => new Date(a.date) - new Date(b.date));
