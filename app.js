@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.16
-// Changes: Replaced the direct tooltip mapping on the .event-name node to a new wrapper div (.event-name-target). This decouples the tooltip bounds from the overflow-hidden properties used to truncate the title, fixing the clipping issue. 
+// Version: V2.17
+// Changes: Render block now assigns the `today-header` class specifically to the `.cell-header` div when rendering the current day. This ensures the solid opaque header can accurately overlay the transparent grid body while preserving the accent tint.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -1065,7 +1065,7 @@ function renderCalendar() {
             weekHtml += `<div class="${bgClasses}" style="grid-column: ${gridCol}; grid-row: 1 / span ${maxSlots + 1};"></div>`;
             
             weekHtml += `
-                <div class="cell-header" style="grid-column: ${gridCol}; grid-row: 1;">
+                <div class="cell-header ${isToday ? 'today-header' : ''}" style="grid-column: ${gridCol}; grid-row: 1;">
                     <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
                     ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" data-tooltip="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" data-tooltip="Invited">${dayTotals.invited}</span></div>`}
                 </div>
