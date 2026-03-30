@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.26 */
-/* Changes: Removed 'overflow: hidden' from spanning-event to let tooltips break bounds, and shifted border-radius styles to inner segment blocks to preserve rounded corners. Created discrete 3-way toggle classes (.view-minimized, .view-events, .view-notes). Fixed the header title logic using nowrap and text-overflow truncating. */
+/* Version: V1.27 */
+/* Changes: Removed 'overflow: hidden' from spanning-event to let tooltips break bounds. Reduced tooltip padding and font size. Adjusted week-container row definitions to enforce equal minimal default heights across all rows. Adjusted day-segment to justify flex-start with a consistent 4px gap for uniform title/notes spacing. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -85,8 +85,8 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 /* Single-Row Truncated Header */
 .header-left { display: flex; align-items: center; flex: 1; min-width: 0; }
 .title-group { display: flex; flex-direction: column; justify-content: center; min-width: 0; width: 100%; }
-.title-group h1 { font-size: 1.1rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;}
-.range-label { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+.title-group h1 { display: none; } /* Hidden per request */
+.range-label { font-size: 0.9rem; font-weight: 500; color: var(--text-primary); margin-top: 2px; }
 
 .header-right { display: flex; align-items: center; gap: 10px; }
 .status-group { text-align: right; display: flex; flex-direction: column; justify-content: center; margin-right: 5px; }
@@ -222,7 +222,7 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 .week-container {
     display: grid;
     grid-template-columns: repeat(var(--col-count, 6), 1fr);
-    grid-template-rows: min-content minmax(65px, auto); 
+    grid-template-rows: min-content; 
     grid-auto-rows: min-content;
     gap: 5px;
     position: relative;
@@ -245,7 +245,17 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 .event-card { background-color: var(--card-color); border-radius: 4px; border-left: 3px solid var(--accent-color); border-right: 3px solid transparent; transition: transform 0.1s, box-shadow 0.1s; position: relative; }
 .event-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10; }
 .spanning-event { z-index: 2; padding: 0; }
-.day-segment { padding: 8px; display: flex; flex-direction: column; justify-content: space-between; height: 100%; cursor: pointer; position: relative; transition: background-color 0.1s; }
+.day-segment { 
+    padding: 6px 8px; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: flex-start; 
+    gap: 4px;
+    height: 100%; 
+    cursor: pointer; 
+    position: relative; 
+    transition: background-color 0.1s; 
+}
 .day-segment:first-child { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
 .day-segment:last-child { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
 .day-segment:hover { background-color: rgba(255, 255, 255, 0.05); }
@@ -257,10 +267,11 @@ select.header-action-btn option { background-color: var(--surface-color); color:
     align-items: flex-start;
     gap: 6px;
 }
+.event-name-target { flex: 1; min-width: 0; }
 .event-name { 
     font-size: calc(0.8rem - 2px); 
     font-weight: normal; 
-    margin-bottom: 4px; 
+    margin-bottom: 0; 
     white-space: normal; 
     word-wrap: break-word; 
     line-height: 1.3;
@@ -276,8 +287,8 @@ select.header-action-btn option { background-color: var(--surface-color); color:
     font-size: calc(0.8rem - 2px);
     color: rgba(255, 255, 255, 0.6);
     font-style: italic;
-    margin-top: 2px;
-    margin-bottom: 6px;
+    margin-top: 0;
+    margin-bottom: 0;
     white-space: pre-wrap;
     word-wrap: break-word;
     line-height: 1.25;
@@ -390,13 +401,13 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     left: 50%;
     transform: translateX(-50%) translateY(4px);
     margin-bottom: 6px;
-    padding: 6px 10px;
+    padding: 4px 6px; /* Reduced padding */
     background: #FFFFFF;
     color: #000000;
-    font-size: 0.75rem;
+    font-size: 0.65rem; /* Reduced font size */
     font-weight: 700;
     white-space: nowrap;
-    border-radius: 6px;
+    border-radius: 4px;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.15s ease, transform 0.15s ease;
@@ -409,7 +420,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     visibility: visible;
     transform: translateX(-50%) translateY(0);
 }
-.event-name[data-tooltip]::before {
+.event-name-target[data-tooltip]::before {
     white-space: normal;
     width: max-content;
     max-width: 220px;
