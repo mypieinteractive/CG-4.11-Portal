@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.27 */
-/* Changes: Removed 'overflow: hidden' from spanning-event to let tooltips break bounds. Reduced tooltip padding and font size. Adjusted week-container row definitions to enforce equal minimal default heights across all rows. Adjusted day-segment to justify flex-start with a consistent 4px gap for uniform title/notes spacing. */
+/* Version: V1.28 */
+/* Changes: Centered .header flex items and removed extra range-label margin. Made .day-bg perfectly transparent so the empty body shows grid spacing. Assiged surface-color and custom rounding directly to .cell-header to mask top grid lines, and implemented a CSS trick for .today-header to perfectly overlay the highlight opacity. Mandated a strict 2.6em height constraint on .event-name to perfectly align all minimum card heights to exactly two 1.3 lines of text. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -75,7 +75,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 .header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end; 
+    align-items: center; 
     padding: 5px 0 15px 0;
     flex-wrap: wrap;
     gap: 15px;
@@ -86,7 +86,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 .header-left { display: flex; align-items: center; flex: 1; min-width: 0; }
 .title-group { display: flex; flex-direction: column; justify-content: center; min-width: 0; width: 100%; }
 .title-group h1 { display: none; } /* Hidden per request */
-.range-label { font-size: 0.9rem; font-weight: 500; color: var(--text-primary); margin-top: 2px; }
+.range-label { font-size: 0.9rem; font-weight: 500; color: var(--text-primary); margin-top: 0; }
 
 .header-right { display: flex; align-items: center; gap: 10px; }
 .status-group { text-align: right; display: flex; flex-direction: column; justify-content: center; margin-right: 5px; }
@@ -228,17 +228,28 @@ select.header-action-btn option { background-color: var(--surface-color); color:
     position: relative;
 }
 
-/* Day Column Backgrounds */
-.day-bg { background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: 6px; z-index: 0; }
-.day-bg.dimmed-empty { background-color: transparent; opacity: 1; }
+/* Day Column Backgrounds & Headers */
+.day-bg { background-color: transparent; border: 1px solid var(--border-color); border-radius: 6px; z-index: 0; }
+.day-bg.dimmed-empty { border-color: rgba(51, 51, 77, 0.5); }
 .today-highlight {
     border: 2px solid var(--accent-color) !important;
-    background-color: rgba(123, 97, 255, 0.15) !important;
+    background-color: rgba(123, 97, 255, 0.05) !important;
     opacity: 1 !important;
 }
 
-/* Cell Headers */
-.cell-header { z-index: 1; padding: 6px 8px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+.cell-header { 
+    z-index: 1; 
+    padding: 6px 8px; 
+    border-bottom: 1px solid var(--border-color); 
+    background-color: var(--surface-color);
+    border-radius: 5px 5px 0 0;
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+}
+/* Hack to blend surface color perfectly beneath the accent tint */
+.today-header { background: linear-gradient(rgba(123, 97, 255, 0.15), rgba(123, 97, 255, 0.15)), var(--surface-color) !important; }
+
 .header-left-col { font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
 
 /* Event Cards & Segments */
@@ -275,6 +286,7 @@ select.header-action-btn option { background-color: var(--surface-color); color:
     white-space: normal; 
     word-wrap: break-word; 
     line-height: 1.3;
+    height: 2.6em; /* Perfectly fits 2 lines */
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
