@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.21
-// Changes: Implemented extract URL params check for `&mobile` to lock system into Agenda Mode. Implemented branching logic in renderCalendar to dynamically generate the Agenda view layout. Modified spanning event map to inject `.hidden-title` on non-first segments and injected `.multi-day-line` to the multi-day wrapper.
+// Version: V2.22
+// Changes: Configured renderCalendar() to calculate and project mathematical progress line bounds based on current time versus min/max dates. Injected window.checkTruncation hook on titles to gracefully attach data-tooltips strictly when titles overflow. Deprecated .multi-day-line and swapped card generation to establish an inline --group-color variable for hover-bounding capabilities.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -926,6 +926,17 @@ function getStartOfWeek(date) {
     return new Date(d.setDate(d.getDate() - day + (day === 0 ? -6 : 1)));
 }
 
+// Check Text Truncation
+window.checkTruncation = function(el) {
+    const textEl = el.querySelector('.event-name');
+    if (!textEl) return;
+    if (textEl.offsetWidth < textEl.scrollWidth || textEl.offsetHeight < textEl.scrollHeight) {
+        el.setAttribute('data-tooltip', el.getAttribute('data-full-title'));
+    } else {
+        el.removeAttribute('data-tooltip');
+    }
+};
+
 // Render Logic
 function renderCalendar() {
     calendarGrid.innerHTML = '';
@@ -944,19 +955,45 @@ function renderCalendar() {
         displayEvents = displayEvents.filter(e => e.projectId === currentProjectFilter);
     }
 
-    if (displayEvents.length === 0) { 
-        if (!isGlobalView) projectDateRange.innerText = "No events scheduled."; 
+    let validDates = displayEvents.map(e => new Date(e.date + 'T00:00:00')).filter(d => !isNaN(d.getTime()));
+    
+    let minDate = validDates.length > 0 ? new Date(Math.min(...validDates)) : null;
+    let maxDate = validDates.length > 0 ? new Date(Math.max(...validDates)) : null;
+
+    if (minDate && maxDate && !isGlobalView) {
+        projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        
+        let todayTime = new Date().setHours(0,0,0,0);
+        let startTime = minDate.getTime();
+        let endTime = maxDate.getTime();
+        let totalRange = endTime - startTime;
+        
+        document.getElementById('progress-container').style.display = 'flex';
+        
+        let remaining = Math.ceil((endTime - todayTime) / (1000 * 60 * 60 * 24));
+        if (remaining < 0) remaining = 0;
+        
+        document.getElementById('progress-text').innerText = `${remaining} Days Remaining`;
+        
+        let percent = 0;
+        if (totalRange > 0) {
+            percent = ((todayTime - startTime) / totalRange) * 100;
+            percent = Math.max(0, Math.min(100, percent));
+        } else {
+            percent = todayTime >= startTime ? 100 : 0;
+        }
+        
+        document.getElementById('progress-fill').style.width = `${percent}%`;
+        document.getElementById('progress-marker').style.left = `${percent}%`;
+        
+    } else {
+        projectDateRange.innerText = isGlobalView ? "Global Overview" : "No events scheduled.";
+        document.getElementById('progress-container').style.display = 'none';
         if (gridHeaders) gridHeaders.innerHTML = '';
         return; 
     }
-    
+
     displayEvents.forEach(ev => { if(!ev.id) ev.id = generateId(); });
-
-    let validDates = displayEvents.map(e => new Date(e.date + 'T00:00:00')).filter(d => !isNaN(d.getTime()));
-    if(validDates.length === 0) return;
-
-    let minDate = new Date(Math.min(...validDates));
-    let maxDate = new Date(Math.max(...validDates));
 
     const hasMondayEvents = displayEvents.some(e => new Date(e.date + 'T00:00:00').getDay() === 1);
     const colCount = hasMondayEvents ? 6 : 5;
@@ -1003,12 +1040,6 @@ function renderCalendar() {
         }
     }
 
-    if (!isGlobalView) {
-        projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-    } else {
-        projectDateRange.innerText = "Global Overview";
-    }
-
     let currentLoopDate = new Date(startOfGrid);
     const palette = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', '#6C5CE7', '#fd79a8', '#00b894', '#e17055'];
     
@@ -1052,10 +1083,6 @@ function renderCalendar() {
                 let dayEvents = displayEvents.filter(ev => ev.date === dateStr);
                 let isDayEmpty = dayEvents.length === 0;
 
-                let dayTotals = dayEvents.filter(e => (e.type || 'Work Event') === 'Work Event').reduce((acc, ev) => {
-                    acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
-                }, { invited: 0, accepted: 0 });
-
                 let dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
                 let dayNum = d.getDate();
                 let monthNum = d.getMonth() + 1;
@@ -1092,9 +1119,9 @@ function renderCalendar() {
                         let titleIconHtml = '';
                         let showStats = false;
                         
-                        if (blockType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.delivery}</div>`;
-                        else if (blockType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.inspection}</div>`;
-                        else if (blockType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.other}</div>`;
+                        if (blockType === 'Delivery') titleIconHtml = `<div class="type-icon">${icons.delivery}</div>`;
+                        else if (blockType === 'Inspection') titleIconHtml = `<div class="type-icon">${icons.inspection}</div>`;
+                        else if (blockType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
                         else showStats = true;
                         
                         let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
@@ -1102,8 +1129,8 @@ function renderCalendar() {
                         
                         let statsHtml = showStats ? `
                             <div class="event-stats inline-stats">
-                                <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                                <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                                <span class="stat-circle accepted-circle" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                                <span class="stat-circle invited-circle" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                             </div>
                         ` : '';
 
@@ -1115,7 +1142,7 @@ function renderCalendar() {
                                     <div class="event-name-wrapper">
                                         ${titleIconHtml}
                                         ${statsHtml}
-                                        <div class="event-name-target" data-tooltip="${safeName}">
+                                        <div class="event-name-target" data-full-title="${safeName}" onmouseenter="checkTruncation(this)">
                                             <div class="event-name">${ev.name}${globalTag}</div>
                                         </div>
                                     </div>
@@ -1236,7 +1263,7 @@ function renderCalendar() {
                 weekHtml += `
                     <div class="cell-header ${isToday ? 'today-header' : ''} ${isDayEmpty ? 'empty-header' : ''}" style="grid-column: ${gridCol}; grid-row: 1;">
                         <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
-                        ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" data-tooltip="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" data-tooltip="Invited">${dayTotals.invited}</span></div>`}
+                        ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle">${dayTotals.accepted}</span><span class="stat-circle invited-circle">${dayTotals.invited}</span></div>`}
                     </div>
                 `;
             }
@@ -1256,14 +1283,16 @@ function renderCalendar() {
                     styleColor = '#E74C3C'; 
                 }
 
-                let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
+                let cardClass = isMulti ? 'multi-day' : '';
+                if (isSpecial) cardClass += ' special-event';
+
+                let cardStyle = `--group-color: ${styleColor}; grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
                 
                 if (isSpecial) {
-                    cardStyle += ` background-color: ${styleColor}4D; border-left: none; border-right: none; border-radius: 6px;`;
+                    cardStyle += ` background-color: ${styleColor}4D; border-radius: 6px;`;
                 } else {
-                    cardStyle += ` border-left-color: ${styleColor};`;
                     if (isMulti) {
-                        cardStyle += ` border-right-color: ${styleColor}; background-color: ${styleColor}1A;`;
+                        cardStyle += ` background-color: ${styleColor}1A;`;
                     }
                 }
                 
@@ -1276,9 +1305,9 @@ function renderCalendar() {
                     let titleIconHtml = '';
                     let showStats = false;
                     
-                    if (evType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.delivery}</div>`;
-                    else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.inspection}</div>`;
-                    else if (evType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.other}</div>`;
+                    if (evType === 'Delivery') titleIconHtml = `<div class="type-icon">${icons.delivery}</div>`;
+                    else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon">${icons.inspection}</div>`;
+                    else if (evType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
                     else showStats = true;
                     
                     let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
@@ -1286,8 +1315,8 @@ function renderCalendar() {
                     
                     let statsHtml = showStats ? `
                         <div class="event-stats inline-stats">
-                            <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                            <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                            <span class="stat-circle accepted-circle" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                            <span class="stat-circle invited-circle" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                         </div>
                     ` : '';
 
@@ -1298,7 +1327,7 @@ function renderCalendar() {
                             <div class="event-name-wrapper">
                                 ${titleIconHtml}
                                 ${statsHtml}
-                                <div class="event-name-target ${hideTitleClass}" data-tooltip="${safeName}">
+                                <div class="event-name-target ${hideTitleClass}" data-full-title="${safeName}" onmouseenter="checkTruncation(this)">
                                     <div class="event-name">${ev.name}${globalTag}</div>
                                 </div>
                             </div>
@@ -1308,8 +1337,7 @@ function renderCalendar() {
                 }).join('');
 
                 weekHtml += `
-                    <div class="event-card spanning-event ${isMulti ? 'multi-day' : ''}" style="${cardStyle}">
-                        ${isMulti && !isSpecial ? `<div class="multi-day-line" style="background-color: ${styleColor};"></div>` : ''}
+                    <div class="event-card spanning-event ${cardClass}" style="${cardStyle}">
                         <div style="display: grid; grid-template-columns: repeat(${block.span}, 1fr); gap: 5px; height: 100%;">
                             ${segmentsHtml}
                         </div>
