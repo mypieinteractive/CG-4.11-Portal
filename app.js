@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.25
-// Changes: Fixed missing data-tooltip elements on stat-circles inside renderCalendar string templates. Implemented isSingleDayView boolean check to render single-day events directly with a textarea inside the edit modal without nested wrappers. Swapped inputs for I/A values in the edit modal to strictly be hidden elements.
+// Version: V2.26
+// Changes: Fixed the premature return condition in renderCalendar() that caused Global View to blank out completely. Rewired the conditional structure so that minDate/maxDate null checks gracefully handle empty states without breaking the core global calendar frame.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -977,32 +977,37 @@ function renderCalendar() {
     let minDate = validDates.length > 0 ? new Date(Math.min(...validDates)) : null;
     let maxDate = validDates.length > 0 ? new Date(Math.max(...validDates)) : null;
 
-    if (minDate && maxDate && !isGlobalView) {
-        projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-        
-        let todayTime = new Date().setHours(0,0,0,0);
-        let startTime = minDate.getTime();
-        let endTime = maxDate.getTime();
-        let totalRange = endTime - startTime;
-        
-        document.getElementById('progress-container').style.display = 'flex';
-        
-        let remaining = Math.ceil((endTime - todayTime) / (1000 * 60 * 60 * 24));
-        if (remaining < 0) remaining = 0;
-        
-        document.getElementById('progress-text').innerText = `${remaining} Days Remaining`;
-        
-        let percent = 0;
-        if (totalRange > 0) {
-            percent = ((todayTime - startTime) / totalRange) * 100;
-            percent = Math.max(0, Math.min(100, percent));
+    if (minDate && maxDate) {
+        if (!isGlobalView) {
+            projectDateRange.innerText = `${minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+            
+            let todayTime = new Date().setHours(0,0,0,0);
+            let startTime = minDate.getTime();
+            let endTime = maxDate.getTime();
+            let totalRange = endTime - startTime;
+            
+            document.getElementById('progress-container').style.display = 'flex';
+            
+            let remaining = Math.ceil((endTime - todayTime) / (1000 * 60 * 60 * 24));
+            if (remaining < 0) remaining = 0;
+            
+            document.getElementById('progress-text').innerText = `${remaining} Days Remaining`;
+            
+            let percent = 0;
+            if (totalRange > 0) {
+                percent = ((todayTime - startTime) / totalRange) * 100;
+                percent = Math.max(0, Math.min(100, percent));
+            } else {
+                percent = todayTime >= startTime ? 100 : 0;
+            }
+            
+            document.getElementById('progress-fill').style.width = `${percent}%`;
+            document.getElementById('progress-marker').style.left = `${percent}%`;
+            
         } else {
-            percent = todayTime >= startTime ? 100 : 0;
+            projectDateRange.innerText = "Global Overview";
+            document.getElementById('progress-container').style.display = 'none';
         }
-        
-        document.getElementById('progress-fill').style.width = `${percent}%`;
-        document.getElementById('progress-marker').style.left = `${percent}%`;
-        
     } else {
         projectDateRange.innerText = isGlobalView ? "Global Overview" : "No events scheduled.";
         document.getElementById('progress-container').style.display = 'none';
@@ -1151,9 +1156,9 @@ function renderCalendar() {
                         let titleIconHtml = '';
                         let showStats = false;
                         
-                        if (blockType === 'Delivery') titleIconHtml = `<div class="type-icon">${icons.delivery}</div>`;
-                        else if (blockType === 'Inspection') titleIconHtml = `<div class="type-icon">${icons.inspection}</div>`;
-                        else if (blockType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
+                        if (blockType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.delivery}</div>`;
+                        else if (blockType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.inspection}</div>`;
+                        else if (blockType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.other}</div>`;
                         else showStats = true;
                         
                         let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
@@ -1337,9 +1342,9 @@ function renderCalendar() {
                     let titleIconHtml = '';
                     let showStats = false;
                     
-                    if (evType === 'Delivery') titleIconHtml = `<div class="type-icon">${icons.delivery}</div>`;
-                    else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon">${icons.inspection}</div>`;
-                    else if (evType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
+                    if (evType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.delivery}</div>`;
+                    else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.inspection}</div>`;
+                    else if (evType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.other}</div>`;
                     else showStats = true;
                     
                     let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
