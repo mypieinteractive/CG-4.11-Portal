@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.20
-// Changes: Appended the stats-toggle logic to seamlessly toggle the hide-stats CSS class. Re-targeted JS visibility queries for the edit modal given the newly flattened daily stats container format.
+// Version: V2.21
+// Changes: Implemented extract URL params check for `&mobile` to lock system into Agenda Mode. Implemented branching logic in renderCalendar to dynamically generate the Agenda view layout. Modified spanning event map to inject `.hidden-title` on non-first segments and injected `.multi-day-line` to the multi-day wrapper.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -35,6 +35,8 @@ let currentProjectFilter = "All";
 let pendingUploadFile = null;
 let dragCounter = 0;
 let currentViewState = 'notes'; // 'notes', 'minimized', 'events'
+let currentMainView = 'calendar'; // 'calendar', 'agenda'
+let isMobileForce = false;
 
 // Sleek Theme SVG Icons
 const icons = {
@@ -45,8 +47,8 @@ const icons = {
 
 // Initialize
 function init() {
-    setupEventListeners();
     extractProjectNumber();
+    setupEventListeners();
 
     if (projectNumber) {
         if (String(projectNumber).toLowerCase().trim() === 'global') {
@@ -65,6 +67,12 @@ function extractProjectNumber() {
     const params = new URLSearchParams(window.location.search);
     projectNumber = params.get('project');
     
+    // Check for explicit mobile framing
+    if (params.has('mobile') || params.get('mobile') === 'true' || params.get('mobile') === '') {
+        isMobileForce = true;
+        currentMainView = 'agenda';
+    }
+
     let extractedTitle = params.get('title');
 
     if (extractedTitle && window.location.hash) {
@@ -345,23 +353,35 @@ function setupEventListeners() {
         }
     });
 
+    const viewToggleBtn = document.getElementById('view-toggle-btn');
+    if (viewToggleBtn) {
+        if (isMobileForce) {
+            viewToggleBtn.style.display = 'none';
+        } else {
+            viewToggleBtn.addEventListener('click', function() {
+                currentMainView = currentMainView === 'calendar' ? 'agenda' : 'calendar';
+                this.innerHTML = currentMainView === 'calendar' 
+                    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg><span>Agenda</span>`
+                    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><span>Calendar</span>`;
+                renderCalendar();
+            });
+        }
+    }
+
     const statsToggleBtn = document.getElementById('stats-toggle-btn');
     if (statsToggleBtn) {
         statsToggleBtn.addEventListener('click', function() {
             calendarGrid.classList.toggle('hide-stats');
             const isHidden = calendarGrid.classList.contains('hide-stats');
-            if (isHidden) {
-                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg><span>Show Stats</span>`;
-            } else {
-                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Hide Stats</span>`;
-            }
+            this.innerHTML = isHidden 
+                ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg><span>Volunteers</span>`
+                : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Volunteers</span>`;
         });
     }
 
     const collapseBtn = document.getElementById('collapse-btn');
     if (collapseBtn) {
         collapseBtn.addEventListener('click', function() {
-            
             if (currentViewState === 'notes') {
                 currentViewState = 'minimized';
                 calendarGrid.classList.remove('view-events', 'view-notes');
@@ -910,7 +930,6 @@ function getStartOfWeek(date) {
 function renderCalendar() {
     calendarGrid.innerHTML = '';
     const gridHeaders = document.querySelector('.grid-headers');
-    gridHeaders.innerHTML = '';
 
     const mainProjTitle = document.getElementById('main-project-title');
     if (mainProjTitle) {
@@ -927,6 +946,7 @@ function renderCalendar() {
 
     if (displayEvents.length === 0) { 
         if (!isGlobalView) projectDateRange.innerText = "No events scheduled."; 
+        if (gridHeaders) gridHeaders.innerHTML = '';
         return; 
     }
     
@@ -941,12 +961,19 @@ function renderCalendar() {
     const hasMondayEvents = displayEvents.some(e => new Date(e.date + 'T00:00:00').getDay() === 1);
     const colCount = hasMondayEvents ? 6 : 5;
     document.documentElement.style.setProperty('--col-count', colCount);
-    
-    if (hasMondayEvents) gridHeaders.innerHTML += `<div class="day-label">Mon</div>`;
-    gridHeaders.innerHTML += `
-        <div class="day-label">Tue</div><div class="day-label">Wed</div>
-        <div class="day-label">Thu</div><div class="day-label">Fri</div><div class="day-label">Sat</div>
-    `;
+
+    if (currentMainView === 'calendar') {
+        if (gridHeaders) {
+            gridHeaders.style.display = 'grid';
+            gridHeaders.innerHTML = hasMondayEvents ? `<div class="day-label">Mon</div>` : '';
+            gridHeaders.innerHTML += `
+                <div class="day-label">Tue</div><div class="day-label">Wed</div>
+                <div class="day-label">Thu</div><div class="day-label">Fri</div><div class="day-label">Sat</div>
+            `;
+        }
+    } else {
+        if (gridHeaders) gridHeaders.style.display = 'none';
+    }
 
     let today = new Date();
     today.setHours(0,0,0,0);
@@ -988,189 +1015,321 @@ function renderCalendar() {
     let htmlStr = '';
     let inLookAhead = false;
     let lookAheadCounter = 0;
+    
+    let uniqueGroupings = [...new Set(displayEvents.map(e => e.name + '|' + e.projectId))];
 
-    while (currentLoopDate <= endOfGridWeek || (inLookAhead && lookAheadCounter < 3)) {
-        let weekDates = [];
-        for(let i = 0; i < 6; i++) {
-            let d = new Date(currentLoopDate);
-            d.setDate(d.getDate() + i);
-            weekDates.push(formatDateObj(d));
-        }
-
-        if (showLookAhead && currentLoopDate.getTime() === startOfTodayWeek.getTime()) {
-            htmlStr += `<div id="current-week-scroll-target"></div>`;
-        }
-
-        if (showLookAhead && currentLoopDate.getTime() === startOfNextWeek.getTime()) {
-            htmlStr += `
-                <div class="look-ahead-wrapper">
-                    <div class="look-ahead-title">3-Week Look Ahead</div>
-            `;
-            inLookAhead = true;
-            lookAheadCounter = 0;
-        }
-
-        let weekEvents = displayEvents.filter(ev => weekDates.includes(ev.date));
+    if (currentMainView === 'agenda') {
         
-        let uniqueGroupings = [...new Set(weekEvents.map(e => e.name + '|' + e.projectId))];
-        
-        let eventBlocks = [];
-        uniqueGroupings.forEach(groupKey => {
-            let startCol = -1;
-            let segments = [];
+        while (currentLoopDate <= endOfGridWeek || (inLookAhead && lookAheadCounter < 3)) {
+            let weekDates = [];
+            for(let i = 0; i < 6; i++) {
+                let d = new Date(currentLoopDate);
+                d.setDate(d.getDate() + i);
+                weekDates.push(formatDateObj(d));
+            }
+
+            if (showLookAhead && currentLoopDate.getTime() === startOfTodayWeek.getTime()) {
+                htmlStr += `<div id="current-week-scroll-target"></div>`;
+            }
+
+            if (showLookAhead && currentLoopDate.getTime() === startOfNextWeek.getTime()) {
+                htmlStr += `
+                    <div class="look-ahead-wrapper">
+                        <div class="look-ahead-title">3-Week Look Ahead</div>
+                `;
+                inLookAhead = true;
+                lookAheadCounter = 0;
+            }
+
+            let weekHtml = `<div class="agenda-week-container">`;
+
             for (let i = 0; i < 6; i++) {
-                let ev = weekEvents.find(e => (e.name + '|' + e.projectId) === groupKey && e.date === weekDates[i]);
-                if (ev) {
-                    if (startCol === -1) startCol = i;
-                    segments.push(ev);
+                if (!hasMondayEvents && i === 0) continue;
+                let dateStr = weekDates[i];
+                let d = new Date(currentLoopDate); d.setDate(d.getDate() + i);
+                let isToday = (dateStr === todayStr);
+                
+                let dayEvents = displayEvents.filter(ev => ev.date === dateStr);
+                let isDayEmpty = dayEvents.length === 0;
+
+                let dayTotals = dayEvents.filter(e => (e.type || 'Work Event') === 'Work Event').reduce((acc, ev) => {
+                    acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
+                }, { invited: 0, accepted: 0 });
+
+                let dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+                let dayNum = d.getDate();
+                let monthNum = d.getMonth() + 1;
+
+                weekHtml += `
+                    <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''} ${isDayEmpty ? 'empty-agenda-row' : ''}">
+                        <div class="agenda-day-left">
+                            <div class="agenda-date">${monthNum}/${dayNum}</div>
+                            <div class="agenda-day-name">${dayName}</div>
+                        </div>
+                        <div class="agenda-day-right">
+                `;
+
+                if (isDayEmpty) {
+                    weekHtml += `<div class="agenda-empty-text">No events scheduled</div>`;
                 } else {
-                    if (startCol !== -1) {
-                        eventBlocks.push({ groupKey, startCol, span: segments.length, segments });
-                        startCol = -1;
-                        segments = [];
+                    dayEvents.forEach(ev => {
+                        let groupKey = ev.name + '|' + ev.projectId;
+                        let colorIdx = uniqueGroupings.indexOf(groupKey);
+                        let styleColor = palette[colorIdx % palette.length];
+                        
+                        let blockType = ev.type || 'Work Event';
+                        let isSpecial = blockType !== 'Work Event';
+                        
+                        if (blockType === 'Delivery') styleColor = '#F39C12'; 
+                        else if (blockType === 'Inspection') styleColor = '#E74C3C'; 
+
+                        let cardStyle = `border-left-color: ${styleColor};`;
+                        if (isSpecial) {
+                            cardStyle = `background-color: ${styleColor}4D; border-left: none;`;
+                        }
+
+                        const hasNotes = ev.notes && ev.notes.trim().length > 0;
+                        let titleIconHtml = '';
+                        let showStats = false;
+                        
+                        if (blockType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.delivery}</div>`;
+                        else if (blockType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.inspection}</div>`;
+                        else if (blockType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.other}</div>`;
+                        else showStats = true;
+                        
+                        let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
+                        let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
+                        
+                        let statsHtml = showStats ? `
+                            <div class="event-stats inline-stats">
+                                <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                                <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                            </div>
+                        ` : '';
+
+                        const safeName = ev.name.replace(/"/g, '&quot;');
+
+                        weekHtml += `
+                            <div class="agenda-event-card" style="${cardStyle}" onclick="openEditModal('${ev.id}')">
+                                <div class="day-segment">
+                                    <div class="event-name-wrapper">
+                                        ${titleIconHtml}
+                                        ${statsHtml}
+                                        <div class="event-name-target" data-tooltip="${safeName}">
+                                            <div class="event-name">${ev.name}${globalTag}</div>
+                                        </div>
+                                    </div>
+                                    ${notesHtml}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                weekHtml += `</div></div>`; 
+            }
+
+            weekHtml += `</div>`;
+            htmlStr += weekHtml;
+
+            if (inLookAhead) {
+                lookAheadCounter++;
+                if (lookAheadCounter === 3) {
+                    htmlStr += `</div>`;
+                    inLookAhead = false;
+                }
+            }
+
+            currentLoopDate.setDate(currentLoopDate.getDate() + 7);
+        }
+
+    } else {
+        
+        while (currentLoopDate <= endOfGridWeek || (inLookAhead && lookAheadCounter < 3)) {
+            let weekDates = [];
+            let weekEvents = [];
+
+            for(let i = 0; i < 6; i++) {
+                let d = new Date(currentLoopDate);
+                d.setDate(d.getDate() + i);
+                weekDates.push(formatDateObj(d));
+            }
+
+            if (showLookAhead && currentLoopDate.getTime() === startOfTodayWeek.getTime()) {
+                htmlStr += `<div id="current-week-scroll-target"></div>`;
+            }
+
+            if (showLookAhead && currentLoopDate.getTime() === startOfNextWeek.getTime()) {
+                htmlStr += `
+                    <div class="look-ahead-wrapper">
+                        <div class="look-ahead-title">3-Week Look Ahead</div>
+                `;
+                inLookAhead = true;
+                lookAheadCounter = 0;
+            }
+
+            weekEvents = displayEvents.filter(ev => weekDates.includes(ev.date));
+            
+            let eventBlocks = [];
+            uniqueGroupings.forEach(groupKey => {
+                let startCol = -1;
+                let segments = [];
+                for (let i = 0; i < 6; i++) {
+                    let ev = weekEvents.find(e => (e.name + '|' + e.projectId) === groupKey && e.date === weekDates[i]);
+                    if (ev) {
+                        if (startCol === -1) startCol = i;
+                        segments.push(ev);
+                    } else {
+                        if (startCol !== -1) {
+                            eventBlocks.push({ groupKey, startCol, span: segments.length, segments });
+                            startCol = -1;
+                            segments = [];
+                        }
                     }
                 }
-            }
-            if (startCol !== -1) eventBlocks.push({ groupKey, startCol, span: segments.length, segments });
-        });
+                if (startCol !== -1) eventBlocks.push({ groupKey, startCol, span: segments.length, segments });
+            });
 
-        eventBlocks.sort((a, b) => {
-            if (a.startCol !== b.startCol) return a.startCol - b.startCol;
-            return b.span - a.span; 
-        });
+            eventBlocks.sort((a, b) => {
+                if (a.startCol !== b.startCol) return a.startCol - b.startCol;
+                return b.span - a.span; 
+            });
 
-        let slotsOccupied = [];
-        eventBlocks.forEach(block => {
-            let row = 0;
-            while (true) {
-                if (!slotsOccupied[row]) slotsOccupied[row] = [];
-                let canFit = true;
-                for (let i = 0; i < block.span; i++) {
-                    if (slotsOccupied[row][block.startCol + i]) { canFit = false; break; }
+            let slotsOccupied = [];
+            eventBlocks.forEach(block => {
+                let row = 0;
+                while (true) {
+                    if (!slotsOccupied[row]) slotsOccupied[row] = [];
+                    let canFit = true;
+                    for (let i = 0; i < block.span; i++) {
+                        if (slotsOccupied[row][block.startCol + i]) { canFit = false; break; }
+                    }
+                    if (canFit) {
+                        for (let i = 0; i < block.span; i++) { slotsOccupied[row][block.startCol + i] = true; }
+                        block.slot = row;
+                        break;
+                    }
+                    row++;
                 }
-                if (canFit) {
-                    for (let i = 0; i < block.span; i++) { slotsOccupied[row][block.startCol + i] = true; }
-                    block.slot = row;
-                    break;
-                }
-                row++;
-            }
-        });
-        
-        let maxSlots = Math.max(slotsOccupied.length, 1);
-        let weekHtml = `<div class="week-container">`;
+            });
+            
+            let maxSlots = Math.max(slotsOccupied.length, 1);
+            let weekHtml = `<div class="week-container">`;
 
-        for (let i = 0; i < 6; i++) {
-            if (!hasMondayEvents && i === 0) continue;
-            let gridCol = hasMondayEvents ? i + 1 : i; 
-            
-            let dateStr = weekDates[i];
-            let d = new Date(currentLoopDate); d.setDate(d.getDate() + i);
-            let isDayEmpty = !weekEvents.some(e => e.date === dateStr);
-            let hasWorkEvents = weekEvents.some(e => e.date === dateStr && (e.type || 'Work Event') === 'Work Event');
-            let isToday = (dateStr === todayStr);
-            let bgClasses = `day-bg ${isDayEmpty && !isToday ? 'dimmed-empty' : ''} ${isToday ? 'today-highlight' : ''}`;
-            
-            let dayTotals = weekEvents.filter(e => e.date === dateStr && (e.type || 'Work Event') === 'Work Event').reduce((acc, ev) => {
-                acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
-            }, { invited: 0, accepted: 0 });
-
-            weekHtml += `<div class="${bgClasses}" style="grid-column: ${gridCol}; grid-row: 1 / span ${maxSlots + 1};"></div>`;
-            
-            weekHtml += `
-                <div class="cell-header ${isToday ? 'today-header' : ''} ${isDayEmpty ? 'empty-header' : ''}" style="grid-column: ${gridCol}; grid-row: 1;">
-                    <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
-                    ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" data-tooltip="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" data-tooltip="Invited">${dayTotals.invited}</span></div>`}
-                </div>
-            `;
-        }
-
-        eventBlocks.forEach(block => {
-            let colorIdx = uniqueGroupings.indexOf(block.groupKey);
-            let styleColor = palette[colorIdx % palette.length];
-            let isMulti = block.span > 1;
-            let gridCol = hasMondayEvents ? block.startCol + 1 : block.startCol;
-            
-            let blockType = block.segments[0].type || 'Work Event';
-            let isSpecial = blockType !== 'Work Event';
-
-            if (blockType === 'Delivery') {
-                styleColor = '#F39C12'; 
-            } else if (blockType === 'Inspection') {
-                styleColor = '#E74C3C'; 
-            }
-
-            let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
-            
-            if (isSpecial) {
-                cardStyle += ` background-color: ${styleColor}4D; border-left: none; border-right: none; border-radius: 6px;`;
-            } else {
-                cardStyle += ` border-left-color: ${styleColor};`;
-                if (isMulti) {
-                    cardStyle += ` border-right-color: ${styleColor}; background-color: ${styleColor}1A;`;
-                }
-            }
-            
-            let segmentsHtml = block.segments.map((ev, idx) => {
-                const hasNotes = ev.notes && ev.notes.trim().length > 0;
-                let segmentStyle = (isMulti && idx < block.span - 1) ? `border-right: 1px dashed rgba(255,255,255,0.15);` : '';
+            for (let i = 0; i < 6; i++) {
+                if (!hasMondayEvents && i === 0) continue;
+                let gridCol = hasMondayEvents ? i + 1 : i; 
                 
-                const evType = ev.type || 'Work Event';
-                let titleIconHtml = '';
-                let showStats = false;
+                let dateStr = weekDates[i];
+                let d = new Date(currentLoopDate); d.setDate(d.getDate() + i);
+                let isDayEmpty = !weekEvents.some(e => e.date === dateStr);
+                let hasWorkEvents = weekEvents.some(e => e.date === dateStr && (e.type || 'Work Event') === 'Work Event');
+                let isToday = (dateStr === todayStr);
+                let bgClasses = `day-bg ${isDayEmpty && !isToday ? 'dimmed-empty' : ''} ${isToday ? 'today-highlight' : ''}`;
                 
-                if (evType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.delivery}</div>`;
-                else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.inspection}</div>`;
-                else if (evType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.other}</div>`;
-                else showStats = true;
-                
-                let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
-                let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
-                
-                let statsHtml = showStats ? `
-                    <div class="event-stats inline-stats">
-                        <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                        <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
-                    </div>
-                ` : '';
+                let dayTotals = weekEvents.filter(e => e.date === dateStr && (e.type || 'Work Event') === 'Work Event').reduce((acc, ev) => {
+                    acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
+                }, { invited: 0, accepted: 0 });
 
-                const safeName = ev.name.replace(/"/g, '&quot;');
-
-                return `
-                    <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
-                        <div class="event-name-wrapper">
-                            ${titleIconHtml}
-                            ${statsHtml}
-                            <div class="event-name-target" data-tooltip="${safeName}">
-                                <div class="event-name">${ev.name}${globalTag}</div>
-                            </div>
-                        </div>
-                        ${notesHtml}
+                weekHtml += `<div class="${bgClasses}" style="grid-column: ${gridCol}; grid-row: 1 / span ${maxSlots + 1};"></div>`;
+                
+                weekHtml += `
+                    <div class="cell-header ${isToday ? 'today-header' : ''} ${isDayEmpty ? 'empty-header' : ''}" style="grid-column: ${gridCol}; grid-row: 1;">
+                        <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
+                        ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" data-tooltip="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" data-tooltip="Invited">${dayTotals.invited}</span></div>`}
                     </div>
                 `;
-            }).join('');
-
-            weekHtml += `
-                <div class="event-card spanning-event ${isMulti ? 'multi-day' : ''}" style="${cardStyle}">
-                    <div style="display: grid; grid-template-columns: repeat(${block.span}, 1fr); gap: 5px; height: 100%;">
-                        ${segmentsHtml}
-                    </div>
-                </div>
-            `;
-        });
-
-        weekHtml += `</div>`;
-        htmlStr += weekHtml;
-
-        if (inLookAhead) {
-            lookAheadCounter++;
-            if (lookAheadCounter === 3) {
-                htmlStr += `</div>`;
-                inLookAhead = false;
             }
-        }
 
-        currentLoopDate.setDate(currentLoopDate.getDate() + 7);
+            eventBlocks.forEach(block => {
+                let colorIdx = uniqueGroupings.indexOf(block.groupKey);
+                let styleColor = palette[colorIdx % palette.length];
+                let isMulti = block.span > 1;
+                let gridCol = hasMondayEvents ? block.startCol + 1 : block.startCol;
+                
+                let blockType = block.segments[0].type || 'Work Event';
+                let isSpecial = blockType !== 'Work Event';
+
+                if (blockType === 'Delivery') {
+                    styleColor = '#F39C12'; 
+                } else if (blockType === 'Inspection') {
+                    styleColor = '#E74C3C'; 
+                }
+
+                let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
+                
+                if (isSpecial) {
+                    cardStyle += ` background-color: ${styleColor}4D; border-left: none; border-right: none; border-radius: 6px;`;
+                } else {
+                    cardStyle += ` border-left-color: ${styleColor};`;
+                    if (isMulti) {
+                        cardStyle += ` border-right-color: ${styleColor}; background-color: ${styleColor}1A;`;
+                    }
+                }
+                
+                let segmentsHtml = block.segments.map((ev, idx) => {
+                    const hasNotes = ev.notes && ev.notes.trim().length > 0;
+                    let segmentStyle = (isMulti && idx < block.span - 1) ? `border-right: 1px dashed rgba(255,255,255,0.15);` : '';
+                    let hideTitleClass = (isMulti && idx > 0) ? 'hidden-title' : '';
+                    
+                    const evType = ev.type || 'Work Event';
+                    let titleIconHtml = '';
+                    let showStats = false;
+                    
+                    if (evType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.delivery}</div>`;
+                    else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.inspection}</div>`;
+                    else if (evType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.other}</div>`;
+                    else showStats = true;
+                    
+                    let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
+                    let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
+                    
+                    let statsHtml = showStats ? `
+                        <div class="event-stats inline-stats">
+                            <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                            <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                        </div>
+                    ` : '';
+
+                    const safeName = ev.name.replace(/"/g, '&quot;');
+
+                    return `
+                        <div class="day-segment" style="${segmentStyle}" onclick="openEditModal('${ev.id}')">
+                            <div class="event-name-wrapper">
+                                ${titleIconHtml}
+                                ${statsHtml}
+                                <div class="event-name-target ${hideTitleClass}" data-tooltip="${safeName}">
+                                    <div class="event-name">${ev.name}${globalTag}</div>
+                                </div>
+                            </div>
+                            ${notesHtml}
+                        </div>
+                    `;
+                }).join('');
+
+                weekHtml += `
+                    <div class="event-card spanning-event ${isMulti ? 'multi-day' : ''}" style="${cardStyle}">
+                        ${isMulti && !isSpecial ? `<div class="multi-day-line" style="background-color: ${styleColor};"></div>` : ''}
+                        <div style="display: grid; grid-template-columns: repeat(${block.span}, 1fr); gap: 5px; height: 100%;">
+                            ${segmentsHtml}
+                        </div>
+                    </div>
+                `;
+            });
+
+            weekHtml += `</div>`;
+            htmlStr += weekHtml;
+
+            if (inLookAhead) {
+                lookAheadCounter++;
+                if (lookAheadCounter === 3) {
+                    htmlStr += `</div>`;
+                    inLookAhead = false;
+                }
+            }
+
+            currentLoopDate.setDate(currentLoopDate.getDate() + 7);
+        }
     }
     
     if (inLookAhead) htmlStr += `</div>`;
