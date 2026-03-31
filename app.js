@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.18
-// Changes: Added the `.empty-header` CSS class dynamically to `.cell-header` tags when `isDayEmpty` is true to match the transparent styling requests.
+// Version: V2.19
+// Changes: Restored the missing color overrides for 'Delivery' (#F39C12) and 'Inspection' (#E74C3C) event types to fix the regression where they were pulling from the standard rotating color palette.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -1080,6 +1080,12 @@ function renderCalendar() {
             
             let blockType = block.segments[0].type || 'Work Event';
             let isSpecial = blockType !== 'Work Event';
+
+            if (blockType === 'Delivery') {
+                styleColor = '#F39C12'; 
+            } else if (blockType === 'Inspection') {
+                styleColor = '#E74C3C'; 
+            }
 
             let cardStyle = `grid-column: ${gridCol} / span ${block.span}; grid-row: ${block.slot + 2};`;
             
