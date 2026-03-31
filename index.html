@@ -44,6 +44,11 @@
                                 <option value="Other">Other</option>
                             </select>
 
+                            <button id="stats-toggle-btn" class="header-action-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <span>Hide Stats</span>
+                            </button>
+
                             <button id="collapse-btn" class="header-action-btn">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
                                 <span>Minimize</span>
@@ -135,6 +140,8 @@
                     <label>Notes</label>
                     <textarea id="add-notes" rows="2" placeholder="Add custom notes here..."></textarea>
                 </div>
+            </div>
+            <div class="modal-footer">
                 <button class="save-btn" onclick="saveNewEvent()">Save Event</button>
             </div>
         </div>
@@ -173,20 +180,16 @@
                     </div>
                 </div>
 
-                <div class="form-group" id="edit-stats-wrapper">
-                    <label>Daily Details</label>
-                    <div id="edit-daily-stats" class="edit-scroll-container">
-                        </div>
-                </div>
-
-                <div class="modal-footer-actions">
-                    <div id="edit-imported-note" class="imported-note" style="display: none;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        Imported from BA
+                <div id="edit-daily-stats" class="daily-stats-list">
                     </div>
-                    <button id="delete-btn" class="delete-btn" onclick="deleteEvent()">Delete</button>
-                    <button class="save-btn" onclick="saveEditedEvent()">Save Changes</button>
+            </div>
+            <div class="modal-footer">
+                <div id="edit-imported-note" class="imported-note" style="display: none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    Imported from BA
                 </div>
+                <button id="delete-btn" class="delete-btn" onclick="deleteEvent()">Delete</button>
+                <button class="save-btn" onclick="saveEditedEvent()">Save Changes</button>
             </div>
         </div>
 
@@ -200,6 +203,8 @@
                     <label>Target Project</label>
                     <select id="upload-project-select"></select>
                 </div>
+            </div>
+            <div class="modal-footer">
                 <button class="save-btn" onclick="confirmGlobalUpload()">Continue Upload</button>
             </div>
         </div>
