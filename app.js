@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.22
-// Changes: Configured renderCalendar() to calculate and project mathematical progress line bounds based on current time versus min/max dates. Injected window.checkTruncation hook on titles to gracefully attach data-tooltips strictly when titles overflow. Deprecated .multi-day-line and swapped card generation to establish an inline --group-color variable for hover-bounding capabilities.
+// Version: V2.24
+// Changes: No functional DOM manipulation changes required for the new header structure layout. Version bumped for consistency across files.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -71,6 +71,7 @@ function extractProjectNumber() {
     if (params.has('mobile') || params.get('mobile') === 'true' || params.get('mobile') === '') {
         isMobileForce = true;
         currentMainView = 'agenda';
+        document.body.classList.add('agenda-mode');
     }
 
     let extractedTitle = params.get('title');
@@ -360,6 +361,7 @@ function setupEventListeners() {
         } else {
             viewToggleBtn.addEventListener('click', function() {
                 currentMainView = currentMainView === 'calendar' ? 'agenda' : 'calendar';
+                document.body.classList.toggle('agenda-mode', currentMainView === 'agenda');
                 this.innerHTML = currentMainView === 'calendar' 
                     ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg><span>Agenda</span>`
                     : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><span>Calendar</span>`;
@@ -1086,12 +1088,27 @@ function renderCalendar() {
                 let dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
                 let dayNum = d.getDate();
                 let monthNum = d.getMonth() + 1;
+                
+                let agendaStatsHtml = '';
+                let dayTotals = dayEvents.filter(e => (e.type || 'Work Event') === 'Work Event').reduce((acc, ev) => {
+                    acc.invited += ev.invited; acc.accepted += ev.accepted; return acc;
+                }, { invited: 0, accepted: 0 });
+
+                if (dayTotals.invited > 0 || dayTotals.accepted > 0) {
+                    agendaStatsHtml = `
+                        <div class="agenda-daily-stats">
+                            <span class="stat-circle accepted-circle" data-tooltip="Accepted">${dayTotals.accepted}</span>
+                            <span class="stat-circle invited-circle" data-tooltip="Invited">${dayTotals.invited}</span>
+                        </div>
+                    `;
+                }
 
                 weekHtml += `
                     <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''} ${isDayEmpty ? 'empty-agenda-row' : ''}">
                         <div class="agenda-day-left">
                             <div class="agenda-date">${monthNum}/${dayNum}</div>
                             <div class="agenda-day-name">${dayName}</div>
+                            ${agendaStatsHtml}
                         </div>
                         <div class="agenda-day-right">
                 `;
@@ -1263,7 +1280,7 @@ function renderCalendar() {
                 weekHtml += `
                     <div class="cell-header ${isToday ? 'today-header' : ''} ${isDayEmpty ? 'empty-header' : ''}" style="grid-column: ${gridCol}; grid-row: 1;">
                         <div class="header-left-col"><span>${d.getMonth() + 1}/${d.getDate()}</span></div>
-                        ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle">${dayTotals.accepted}</span><span class="stat-circle invited-circle">${dayTotals.invited}</span></div>`}
+                        ${!hasWorkEvents ? '' : `<div class="header-totals"><span class="stat-circle accepted-circle" data-tooltip="Accepted">${dayTotals.accepted}</span><span class="stat-circle invited-circle" data-tooltip="Invited">${dayTotals.invited}</span></div>`}
                     </div>
                 `;
             }
