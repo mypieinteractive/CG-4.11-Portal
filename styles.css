@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.36 */
-/* Changes: Consolidated header action items into .action-buttons-group array to ensure pure layout reflow across screen dimensions. Built rigid flex-order assignments within mobile media query to place [Upload] | [+] side by side on Row 3, and dynamically pair [Agenda] or [Type] blocks with remaining targets based on body.agenda-mode. */
+/* Version: V1.37 */
+/* Changes: Re-organized mobile CSS orders so #collapse-btn maps securely to order 3, with #stats-toggle-btn mapping to 4. This guarantees they stay side-by-side cleanly in standard calendar mode, and when #collapse-btn is stripped in agenda-mode, #stats-toggle-btn and #event-type-filter naturally fill the row. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -126,6 +126,8 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     justify-content: flex-end;
     align-items: center;
 }
+
+.mobile-wrap-group, .mobile-btn-row { display: flex; gap: 10px; }
 
 /* Subtle styling for Dropdowns and Text Actions */
 .header-action-btn {
@@ -569,13 +571,13 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     /* Default Calendar Mobile Layout */
     #view-toggle-btn { width: 100%; order: 1; justify-content: center; }
     #event-type-filter { width: 100%; order: 2; }
-    #stats-toggle-btn { width: calc(50% - 5px); order: 3; justify-content: center; }
-    #collapse-btn { width: calc(50% - 5px); order: 4; justify-content: center; }
+    #collapse-btn { width: calc(50% - 5px); order: 3; justify-content: center; }
+    #stats-toggle-btn { width: calc(50% - 5px); order: 4; justify-content: center; }
     #upload-btn { width: calc(50% - 5px); order: 5; justify-content: center; }
     .global-add-btn { width: calc(50% - 5px); order: 6; justify-content: center; }
 
     /* Default Agenda Mobile Layout */
     body.agenda-mode #event-type-filter { width: calc(50% - 5px); order: 2; }
-    body.agenda-mode #stats-toggle-btn { width: calc(50% - 5px); order: 3; }
+    body.agenda-mode #stats-toggle-btn { width: calc(50% - 5px); order: 4; }
     body.agenda-mode #collapse-btn { display: none !important; }
 }
