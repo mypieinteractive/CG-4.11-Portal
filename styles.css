@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.29 */
-/* Changes: Moved .event-name-wrapper flex-align to 'center' and gave it a min-height constraint to inherently center 1-line titles while guaranteeing card consistency. Defined .empty-header to securely strip header backgrounds on days lacking events. Set grid-template-rows in .week-container to secure a 45px minimum body zone for completely empty week arrays. Fixed header alignment mapping. */
+/* Version: V1.30 */
+/* Changes: Converted modal layouts to header/body/footer architecture. Bound max-height to .modal and overflow-y to .modal-body to guarantee smooth scrolling inside the frame. Affixed buttons to sticky .modal-footer. Removed the border and background artifacts from .daily-stats-list. Established the .hide-stats state variables to vanish headers and allow titles to reclaim space organically. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -183,6 +183,10 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 /* Forces ability to scroll to top regardless of calendar depth */
 .calendar-bottom-padding { height: 80vh; width: 100%; pointer-events: none; }
 
+/* Stats Toggle Logic */
+.calendar-grid.hide-stats .header-totals,
+.calendar-grid.hide-stats .event-stats { display: none !important; }
+
 /* 3-Way Cycle Overrides */
 /* 1. view-minimized (Ultra-collapsed) */
 .calendar-grid.view-minimized .week-container { grid-template-rows: min-content !important; gap: 5px; }
@@ -333,13 +337,42 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 /* Modals */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; }
 .modal-overlay.hidden { display: none; }
-.modal { background: var(--surface-color); width: 90%; max-width: 400px; border-radius: 10px; border: 1px solid var(--border-color); overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.modal { 
+    background: var(--surface-color); 
+    width: 90%; 
+    max-width: 400px; 
+    border-radius: 10px; 
+    border: 1px solid var(--border-color); 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh; /* Bounds the modal frame so internal body can scroll */
+}
 .modal.hidden { display: none; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
 .modal-header h2 { font-size: 1.1rem; }
 .close-btn { background: none; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; }
 .close-btn:hover { color: white; }
-.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+
+.modal-body { 
+    padding: 20px; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 15px; 
+    overflow-y: auto; /* Activates internal scrolling */
+    flex: 1;
+}
+
+.modal-footer {
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    gap: 10px;
+    padding: 15px 20px;
+    background: var(--surface-color);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
 
 .form-row { display: flex; gap: 15px; }
 .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; }
@@ -353,7 +386,6 @@ input[type="date"] { position: relative; cursor: pointer; }
 input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; background: transparent; color: transparent; }
 
 /* Modal Footer Actions */
-.modal-footer-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; gap: 10px;}
 .save-btn { background: var(--accent-color); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; flex: 1;}
 .save-btn:hover { background: var(--accent-hover); }
 .delete-btn { background: transparent; color: #E74C3C; border: 1px solid #E74C3C; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; flex: 1;}
@@ -363,7 +395,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 .imported-note { display: flex; align-items: center; justify-content: center; gap: 8px; background-color: rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 10px; font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; flex: 1; height: 100%; }
 
 /* Dynamic Daily Stat Editors */
-.edit-scroll-container { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 5px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; }
+.daily-stats-list { display: flex; flex-direction: column; gap: 12px; padding-top: 5px; }
 .daily-stat-row { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); transition: background-color 0.3s; }
 .daily-stat-row:last-child { border-bottom: none; padding-bottom: 0; }
 .daily-stat-row.highlighted-row {
