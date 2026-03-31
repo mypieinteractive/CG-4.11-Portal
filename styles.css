@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.31 */
-/* Changes: Added agenda view specific blocks (.agenda-week-container, .agenda-day-row). Implemented .hidden-title opacity fade for multi-day segments. Bound .multi-day-line immediately under the wrapper zone. Forced the flex order on .event-name-wrapper to let titles expand left natively when .hide-stats removes the counters. */
+/* Version: V1.32 */
+/* Changes: Established header-top-row with a built-in progress line. Rebuilt header action block with .mobile-btn-row pairs to smartly stack grids on tight screens. Replaced multi-day line rendering with robust var(--group-color) border assignments that dynamically encase entire event groups symmetrically. Integrated checkTruncation data-tooltip dependencies natively into css. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -74,24 +74,43 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 
 .header {
     display: flex;
-    justify-content: space-between;
-    align-items: center; 
-    padding: 5px 0 15px 0;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 15px;
-    background-color: var(--bg-color); 
+    padding: 5px 0 15px 0;
+    background-color: var(--bg-color);
+    width: 100%;
 }
 
-/* Single-Row Truncated Header */
-.header-left { display: flex; align-items: center; flex: 1; min-width: 0; }
-.title-group { display: flex; flex-direction: column; justify-content: center; min-width: 0; width: 100%; }
-.title-group h1 { display: none; } /* Hidden per request */
+.header-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    width: 100%;
+}
+
+/* Header Re-Org: Dates and Progress */
+.date-progress-wrapper { display: inline-flex; flex-direction: column; gap: 6px; }
 .range-label { font-size: 0.9rem; font-weight: 500; color: var(--text-primary); margin-top: 0; }
 
-.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.status-group { text-align: right; display: flex; flex-direction: column; justify-content: center; margin-right: 5px; }
+.progress-container { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.progress-bar { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; position: relative; width: 100%; }
+.progress-fill { height: 100%; background: var(--accent-color); border-radius: 2px; width: 0%; }
+.progress-marker { width: 2px; height: 10px; background: #FFF; position: absolute; top: -3px; left: 0%; transform: translateX(-50%); border-radius: 1px; }
+.progress-text { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
-.last-updated { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
+.status-group { text-align: right; }
+.last-updated { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; font-weight: 500; }
+
+.header-action-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: 100%;
+    align-items: center;
+}
+
+.mobile-btn-row { display: flex; gap: 10px; }
 
 /* Subtle styling for Dropdowns and Text Actions */
 .header-action-btn {
@@ -262,8 +281,25 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 .header-left-col { font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
 
 /* Event Cards & Segments */
-.event-card { background-color: var(--card-color); border-radius: 4px; border-left: 3px solid var(--accent-color); border-right: 3px solid transparent; transition: transform 0.1s, box-shadow 0.1s; position: relative; }
-.event-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10; }
+/* Utilizing --group-color variable injected by JS to construct unified hover boundaries */
+.event-card { 
+    background-color: var(--card-color); 
+    border-radius: 4px; 
+    border: 2px solid transparent; 
+    border-left: 3px solid var(--group-color, var(--accent-color)); 
+    border-right: 3px solid transparent; 
+    transition: transform 0.1s, box-shadow 0.1s, border-color 0.1s; 
+    position: relative; 
+}
+.event-card.multi-day { border-right: 3px solid var(--group-color, var(--accent-color)); }
+.event-card.special-event { border-left: 2px solid transparent; }
+.event-card:hover { 
+    border-color: var(--group-color, var(--accent-color)) !important;
+    transform: translateY(-1px); 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
+    z-index: 10; 
+}
+
 .spanning-event { z-index: 2; padding: 0; }
 .day-segment { 
     padding: 6px 8px; 
@@ -283,17 +319,6 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 /* Multi-Day Display Behaviors */
 .hidden-title { opacity: 0; transition: opacity 0.2s ease; }
 .day-segment:hover .hidden-title { opacity: 1; }
-
-.multi-day-line {
-    position: absolute;
-    top: 36px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    z-index: 1;
-    opacity: 0.6;
-    pointer-events: none;
-}
 
 /* Event Text & Icons */
 .event-name-wrapper {
@@ -450,9 +475,11 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 .edit-note-input:focus { border-color: var(--accent-color); }
 
 @media (max-width: 768px) {
-    .header { flex-direction: column; align-items: stretch; text-align: center; }
-    .header-left, .header-right { flex-direction: column; justify-content: center; }
-    .upload-module, .header-action-btn { min-width: 100%; justify-content: center; }
+    .header-action-row { display: flex; flex-direction: column; align-items: stretch; }
+    .mobile-btn-row { display: flex; width: 100%; }
+    .mobile-btn-row > button { flex: 1; justify-content: center; }
+    .global-add-btn { flex: 0 0 48px; }
+    #event-type-filter, #project-filter, #view-toggle-btn { width: 100%; }
 }
 
 /* Inline Stat Editors */
