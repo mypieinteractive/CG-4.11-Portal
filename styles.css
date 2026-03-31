@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.34 */
-/* Changes: Flex-end on header-main-row pulls Dates+Progress cleanly to the bottom axis while keeping Last Import right-justified via header-status-row. Defined mobile-wrap-group stacking to dynamically adapt single-row combinations when agenda-mode strips out the minimize btn. */
+/* Version: V1.35 */
+/* Changes: Adjusted .single-day-mode within .daily-stat-row for edge-case styling without headers. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -107,8 +107,8 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
 .progress-marker { width: 2px; height: 10px; background: #FFF; position: absolute; top: -3px; left: 0%; transform: translateX(-50%); border-radius: 1px; }
 .progress-text { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
-.status-group { text-align: right; }
-.last-updated { font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; }
+.status-group { text-align: right; margin-bottom: 2px; }
+.last-updated { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; font-weight: 500; }
 
 .header-action-row {
     display: flex;
@@ -477,6 +477,9 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 .daily-stats-list { display: flex; flex-direction: column; gap: 12px; padding-top: 5px; }
 .daily-stat-row { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); transition: background-color 0.3s; }
 .daily-stat-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+.daily-stat-row.single-day-mode { border-bottom: none; padding-bottom: 0; }
+
 .daily-stat-row.highlighted-row {
     background-color: rgba(123, 97, 255, 0.15);
     border: 1px solid var(--accent-color);
@@ -555,15 +558,16 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     
     .mobile-wrap-group { flex-wrap: wrap; width: 100%; }
     #event-type-filter { width: 100%; flex: none; }
-    #stats-toggle-btn, #collapse-btn { flex: 1; justify-content: center; }
+    #view-toggle-btn, #stats-toggle-btn, #collapse-btn { flex: 1; justify-content: center; }
 
     /* Dynamically repositions components on the same line if minimize is disabled by agenda mode */
     body.agenda-mode #event-type-filter { width: auto; flex: 1; }
+    body.agenda-mode #view-toggle-btn { flex: 1; }
     body.agenda-mode #stats-toggle-btn { flex: 1; }
     body.agenda-mode #collapse-btn { display: none !important; }
 
     .mobile-btn-row { display: flex; width: 100%; }
     .mobile-btn-row > button { flex: 1; justify-content: center; }
     .global-add-btn { flex: 0 0 48px; }
-    #project-filter, #view-toggle-btn { width: 100%; justify-content: center; }
+    #project-filter { width: 100%; justify-content: center; }
 }
