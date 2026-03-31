@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.24
-// Changes: No functional DOM manipulation changes required for the new header structure layout. Version bumped for consistency across files.
+// Version: V2.25
+// Changes: Fixed missing data-tooltip elements on stat-circles inside renderCalendar string templates. Implemented isSingleDayView boolean check to render single-day events directly with a textarea inside the edit modal without nested wrappers. Swapped inputs for I/A values in the edit modal to strictly be hidden elements.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -715,8 +715,21 @@ function renderEditStats(startStr, endStr, highlightDate = null) {
     if (!startStr) return;
     
     const isImported = editRelatedEvents.length > 0 && editRelatedEvents[0].imported;
-    const evType = document.getElementById('edit-type').value;
-    const showStats = evType === 'Work Event';
+    
+    let isSingleDayView = false;
+    let end = null;
+    let start = new Date(startStr + 'T00:00:00');
+    
+    if (isImported) {
+        isSingleDayView = editRelatedEvents.length === 1;
+    } else {
+        end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
+        if (end < start) end = new Date(start);
+        let days = 0;
+        let c = new Date(start);
+        while(c <= end) { if(c.getDay() !== 0) days++; c.setDate(c.getDate()+1); }
+        isSingleDayView = days <= 1;
+    }
 
     if (isImported) {
         editRelatedEvents.forEach(existing => {
@@ -726,55 +739,19 @@ function renderEditStats(startStr, endStr, highlightDate = null) {
             let acc = existing.accepted || 0;
             let note = existing.notes || '';
             
-            let statsHtml = showStats ? `
-                <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
-                    <label>I:</label>
-                    <input type="number" class="edit-inv-input" value="${inv}" min="0" style="padding: 5px;">
-                </div>
-                <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
-                    <label>A:</label>
-                    <input type="number" class="edit-acc-input" value="${acc}" min="0" style="padding: 5px;">
-                </div>
-            ` : `<input type="hidden" class="edit-inv-input" value="0"><input type="hidden" class="edit-acc-input" value="0">`;
+            let statsHtml = `<input type="hidden" class="edit-inv-input" value="${inv}"><input type="hidden" class="edit-acc-input" value="${acc}">`;
 
-            let isHighlighted = (dStr === highlightDate);
-            let rowClass = isHighlighted ? 'daily-stat-row highlighted-row' : 'daily-stat-row';
-
-            container.innerHTML += `
-                <div class="${rowClass}" data-date="${dStr}">
-                    <div class="daily-stat-row-top">
-                        <div class="stat-date-label">${current.getMonth()+1}/${current.getDate()}</div>
+            if (isSingleDayView) {
+                container.innerHTML += `
+                    <div class="daily-stat-row single-day-mode" data-date="${dStr}">
                         ${statsHtml}
+                        <div class="form-group">
+                            <label>Notes</label>
+                            <textarea class="edit-note-input" rows="4" placeholder="Add custom notes here...">${note}</textarea>
+                        </div>
                     </div>
-                    <textarea class="edit-note-input" rows="2" placeholder="Notes for this day...">${note}</textarea>
-                </div>
-            `;
-        });
-    } else {
-        let start = new Date(startStr + 'T00:00:00');
-        let end = endStr ? new Date(endStr + 'T00:00:00') : new Date(start);
-        if (end < start) end = new Date(start);
-        
-        let current = new Date(start);
-        while (current <= end) {
-            if (current.getDay() !== 0) {
-                let dStr = formatDateObj(current);
-                let existing = editRelatedEvents.find(e => e.date === dStr);
-                let inv = existing ? existing.invited : 0;
-                let acc = existing ? existing.accepted : 0;
-                let note = existing && existing.notes ? existing.notes : '';
-                
-                let statsHtml = showStats ? `
-                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
-                        <label>I:</label>
-                        <input type="number" class="edit-inv-input" value="${inv}" min="0" style="padding: 5px;">
-                    </div>
-                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 5px;">
-                        <label>A:</label>
-                        <input type="number" class="edit-acc-input" value="${acc}" min="0" style="padding: 5px;">
-                    </div>
-                ` : `<input type="hidden" class="edit-inv-input" value="0"><input type="hidden" class="edit-acc-input" value="0">`;
-
+                `;
+            } else {
                 let isHighlighted = (dStr === highlightDate);
                 let rowClass = isHighlighted ? 'daily-stat-row highlighted-row' : 'daily-stat-row';
 
@@ -788,16 +765,54 @@ function renderEditStats(startStr, endStr, highlightDate = null) {
                     </div>
                 `;
             }
+        });
+    } else {
+        let current = new Date(start);
+        while (current <= end) {
+            if (current.getDay() !== 0) {
+                let dStr = formatDateObj(current);
+                let existing = editRelatedEvents.find(e => e.date === dStr);
+                let inv = existing ? existing.invited : 0;
+                let acc = existing ? existing.accepted : 0;
+                let note = existing && existing.notes ? existing.notes : '';
+                
+                let statsHtml = `<input type="hidden" class="edit-inv-input" value="${inv}"><input type="hidden" class="edit-acc-input" value="${acc}">`;
+
+                if (isSingleDayView) {
+                    container.innerHTML += `
+                        <div class="daily-stat-row single-day-mode" data-date="${dStr}">
+                            ${statsHtml}
+                            <div class="form-group">
+                                <label>Notes</label>
+                                <textarea class="edit-note-input" rows="4" placeholder="Add custom notes here...">${note}</textarea>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    let isHighlighted = (dStr === highlightDate);
+                    let rowClass = isHighlighted ? 'daily-stat-row highlighted-row' : 'daily-stat-row';
+
+                    container.innerHTML += `
+                        <div class="${rowClass}" data-date="${dStr}">
+                            <div class="daily-stat-row-top">
+                                <div class="stat-date-label">${current.getMonth()+1}/${current.getDate()}</div>
+                                ${statsHtml}
+                            </div>
+                            <textarea class="edit-note-input" rows="2" placeholder="Notes for this day...">${note}</textarea>
+                        </div>
+                    `;
+                }
+            }
             current.setDate(current.getDate() + 1);
         }
     }
 
-    if (highlightDate) {
+    if (highlightDate && !isSingleDayView) {
         setTimeout(() => {
             const row = container.querySelector(`.daily-stat-row[data-date="${highlightDate}"]`);
             if (row) {
                 row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                const firstInput = row.querySelector('input:not([type="hidden"])');
+                const firstInput = row.querySelector('.edit-note-input');
                 if (firstInput) firstInput.focus();
             }
         }, 50);
@@ -1146,8 +1161,8 @@ function renderCalendar() {
                         
                         let statsHtml = showStats ? `
                             <div class="event-stats inline-stats">
-                                <span class="stat-circle accepted-circle" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                                <span class="stat-circle invited-circle" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                                <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                                <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                             </div>
                         ` : '';
 
@@ -1332,8 +1347,8 @@ function renderCalendar() {
                     
                     let statsHtml = showStats ? `
                         <div class="event-stats inline-stats">
-                            <span class="stat-circle accepted-circle" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                            <span class="stat-circle invited-circle" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                            <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                            <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                         </div>
                     ` : '';
 
