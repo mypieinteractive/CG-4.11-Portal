@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.26
-// Changes: Fixed the premature return condition in renderCalendar() that caused Global View to blank out completely. Rewired the conditional structure so that minDate/maxDate null checks gracefully handle empty states without breaking the core global calendar frame.
+// Version: V2.27
+// Changes: No structural JS logic updates required for flex-order swapping.
 
 // Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
@@ -1156,9 +1156,9 @@ function renderCalendar() {
                         let titleIconHtml = '';
                         let showStats = false;
                         
-                        if (blockType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.delivery}</div>`;
-                        else if (blockType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.inspection}</div>`;
-                        else if (blockType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${blockType}">${icons.other}</div>`;
+                        if (blockType === 'Delivery') titleIconHtml = `<div class="type-icon">${icons.delivery}</div>`;
+                        else if (blockType === 'Inspection') titleIconHtml = `<div class="type-icon">${icons.inspection}</div>`;
+                        else if (blockType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
                         else showStats = true;
                         
                         let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
@@ -1342,9 +1342,9 @@ function renderCalendar() {
                     let titleIconHtml = '';
                     let showStats = false;
                     
-                    if (evType === 'Delivery') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.delivery}</div>`;
-                    else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.inspection}</div>`;
-                    else if (evType === 'Other') titleIconHtml = `<div class="type-icon" data-tooltip="${evType}">${icons.other}</div>`;
+                    if (evType === 'Delivery') titleIconHtml = `<div class="type-icon">${icons.delivery}</div>`;
+                    else if (evType === 'Inspection') titleIconHtml = `<div class="type-icon">${icons.inspection}</div>`;
+                    else if (evType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
                     else showStats = true;
                     
                     let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
