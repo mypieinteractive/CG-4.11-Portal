@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.28 */
-/* Changes: Centered .header flex items and removed extra range-label margin. Made .day-bg perfectly transparent so the empty body shows grid spacing. Assiged surface-color and custom rounding directly to .cell-header to mask top grid lines, and implemented a CSS trick for .today-header to perfectly overlay the highlight opacity. Mandated a strict 2.6em height constraint on .event-name to perfectly align all minimum card heights to exactly two 1.3 lines of text. */
+/* Version: V1.29 */
+/* Changes: Moved .event-name-wrapper flex-align to 'center' and gave it a min-height constraint to inherently center 1-line titles while guaranteeing card consistency. Defined .empty-header to securely strip header backgrounds on days lacking events. Set grid-template-rows in .week-container to secure a 45px minimum body zone for completely empty week arrays. Fixed header alignment mapping. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -222,7 +222,7 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 .week-container {
     display: grid;
     grid-template-columns: repeat(var(--col-count, 6), 1fr);
-    grid-template-rows: min-content; 
+    grid-template-rows: min-content minmax(45px, auto); /* Secures body height for completely empty weeks */
     grid-auto-rows: min-content;
     gap: 5px;
     position: relative;
@@ -247,7 +247,12 @@ select.header-action-btn option { background-color: var(--surface-color); color:
     justify-content: space-between; 
     align-items: center; 
 }
-/* Hack to blend surface color perfectly beneath the accent tint */
+
+/* Dynamic State for Headers */
+.cell-header.empty-header { 
+    background-color: transparent !important; 
+    border-bottom-color: rgba(51, 51, 77, 0.5); 
+}
 .today-header { background: linear-gradient(rgba(123, 97, 255, 0.15), rgba(123, 97, 255, 0.15)), var(--surface-color) !important; }
 
 .header-left-col { font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
@@ -275,8 +280,9 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 .event-name-wrapper {
     display: flex;
     justify-content: flex-start;
-    align-items: flex-start;
+    align-items: center; /* Vertically centers the text and icons when titles are 1-line short */
     gap: 6px;
+    min-height: 2.6em; /* Forces card wrapper height to ALWAYS equal minimum 2 text lines */
 }
 .event-name-target { flex: 1; min-width: 0; }
 .event-name { 
@@ -286,7 +292,7 @@ select.header-action-btn option { background-color: var(--surface-color); color:
     white-space: normal; 
     word-wrap: break-word; 
     line-height: 1.3;
-    height: 2.6em; /* Perfectly fits 2 lines */
+    max-height: 2.6em;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
