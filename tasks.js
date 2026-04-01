@@ -1,6 +1,6 @@
 // File: tasks.js
-// Version: V1.1
-// Description: Logic engine for the Implementation Task Tracker. Groups by Date > Category > SubCategory. Autoscrolls to the first incomplete task on load.
+// Version: V1.2
+// Description: Rewrote grouping array logic to Date -> Category -> Subcategory. Added dynamic assignee dropdown population. Connected inline Add Task buttons to absolute date strings.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -14,12 +14,14 @@ const tasksStatus = document.getElementById('tasks-status');
 const modalOverlay = document.getElementById('modal-overlay');
 const addModal = document.getElementById('add-modal');
 const viewToggleBtn = document.getElementById('view-toggle-btn');
+const assigneeFilter = document.getElementById('assignee-filter');
 
 // State
 let projectNumber = null;
 let projectTitle = null;
 let isGlobalView = false;
-let hideCompleted = false; // Default to FALSE so historical tasks are present to be scrolled up to
+let hideCompleted = false; // Default false to allow scroll-up history
+let currentAssigneeFilter = "All";
 
 let masterTasks = [];
 let projectsData = [];
@@ -35,8 +37,8 @@ function init() {
     if (projectNumber) {
         if (String(projectNumber).toLowerCase().trim() === 'global') {
             isGlobalView = true;
-            document.getElementById('add-task-btn').style.display = 'none'; 
             document.getElementById('main-title-group').style.display = 'none';
+            document.getElementById('project-filter').style.display = 'flex';
         }
         fetchDatabaseData();
     } else {
@@ -130,11 +132,15 @@ function processAndMergeData() {
     if (isGlobalView) {
         projectDateRange.innerText = "Global Active Task Overview";
         
+        let projOpts = `<option value="All">All Projects</option>`;
+        
         projectsData.forEach(proj => {
             let pid = proj['$rowID'];
             let ptitle = proj['2UR8V'] ? `PT# ${proj['2UR8V']}` : proj['Name'] || 'Unnamed Project';
             let startStr = proj['GgPWW'];
             let jsonStr = proj['O2aWa'];
+            
+            projOpts += `<option value="${pid}">${ptitle}</option>`;
 
             let jsonArr = [];
             try { jsonArr = JSON.parse(jsonStr) || []; } catch(e) {}
@@ -143,8 +149,6 @@ function processAndMergeData() {
                 let savedState = jsonArr.find(j => j.id === mt.id);
                 let isCompleted = savedState ? !!savedState.completed : false;
                 
-                if (isCompleted && hideCompleted) return; 
-
                 let dueDate = calculateDueDate(startStr, mt.wks);
                 mergedTasks.push({
                     ...mt,
@@ -159,17 +163,14 @@ function processAndMergeData() {
 
             let customTasks = jsonArr.filter(j => j.isCustom);
             customTasks.forEach(ct => {
-                if (ct.completed && hideCompleted) return;
-
-                let dueDate = calculateDueDate(startStr, ct.wks);
+                let dueDate = ct.targetDateStr ? new Date(ct.targetDateStr + 'T00:00:00') : calculateDueDate(startStr, ct.wks || 0);
                 mergedTasks.push({
                     id: ct.id,
-                    category: 'Custom',
+                    category: 'Custom Tasks',
                     subCategory: '',
                     projectId: pid,
                     projectTitle: ptitle,
                     name: ct.name,
-                    wks: ct.wks,
                     assignee: ct.assignee,
                     dueDate: dueDate,
                     completed: !!ct.completed,
@@ -178,6 +179,8 @@ function processAndMergeData() {
                 });
             });
         });
+        
+        document.getElementById('project-filter').innerHTML = projOpts;
 
     } else {
         let activeProj = projectsData.find(p => p['$rowID'] === projectNumber || (p['2UR8V'] && p['2UR8V'] === projectNumber));
@@ -195,7 +198,7 @@ function processAndMergeData() {
             let d = new Date(projectStartDate);
             projectDateRange.innerText = `Project Start Date: ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
         } else {
-            projectDateRange.innerText = `No Start Date Configured. Tasks will not have due dates.`;
+            projectDateRange.innerText = `No Start Date Configured.`;
         }
 
         let jsonStr = activeProj['O2aWa'];
@@ -216,22 +219,23 @@ function processAndMergeData() {
 
         let customTasks = jsonArr.filter(j => j.isCustom);
         customTasks.forEach(ct => {
-            let dueDate = calculateDueDate(projectStartDate, ct.wks);
+            let dueDate = ct.targetDateStr ? new Date(ct.targetDateStr + 'T00:00:00') : calculateDueDate(projectStartDate, ct.wks || 0);
             mergedTasks.push({
                 id: ct.id,
-                category: 'Custom',
+                category: 'Custom Tasks',
                 subCategory: '',
                 name: ct.name,
-                wks: ct.wks,
                 assignee: ct.assignee,
                 dueDate: dueDate,
                 completed: !!ct.completed,
                 notes: ct.notes || "",
+                targetDateStr: ct.targetDateStr,
                 isCustom: true
             });
         });
     }
 
+    populateAssigneeDropdown();
     setHeaderLoading(false);
     renderTasks();
 
@@ -241,12 +245,33 @@ function processAndMergeData() {
     }
 }
 
+function populateAssigneeDropdown() {
+    if (!assigneeFilter) return;
+    let currentVal = assigneeFilter.value;
+    let assignees = [...new Set(mergedTasks.map(t => t.assignee).filter(a => a && a !== 'Unassigned'))].sort();
+    
+    let html = `<option value="All">All Assignees</option>`;
+    assignees.forEach(a => { html += `<option value="${a}">${a}</option>`; });
+    html += `<option value="Unassigned">Unassigned</option>`;
+    
+    assigneeFilter.innerHTML = html;
+    if (currentVal && Array.from(assigneeFilter.options).some(o => o.value === currentVal)) {
+        assigneeFilter.value = currentVal;
+    }
+}
+
 function renderTasks() {
     tasksContainer.innerHTML = '';
     
     let displayTasks = mergedTasks;
-    if (hideCompleted) {
-        displayTasks = displayTasks.filter(t => !t.completed);
+    if (hideCompleted) displayTasks = displayTasks.filter(t => !t.completed);
+    if (currentAssigneeFilter !== 'All') {
+        displayTasks = displayTasks.filter(t => (t.assignee || 'Unassigned') === currentAssigneeFilter);
+    }
+    
+    const projFilterEl = document.getElementById('project-filter');
+    if (isGlobalView && projFilterEl && projFilterEl.value !== 'All') {
+        displayTasks = displayTasks.filter(t => t.projectId === projFilterEl.value);
     }
 
     if (displayTasks.length === 0) {
@@ -255,125 +280,127 @@ function renderTasks() {
         return;
     }
 
-    // Sort by Due Date
+    // Sort Tasks: Date -> Category -> SubCategory -> Name
     displayTasks.sort((a, b) => {
         let dateA = a.dueDate ? a.dueDate.getTime() : 9999999999999;
         let dateB = b.dueDate ? b.dueDate.getTime() : 9999999999999;
-        return dateA - dateB;
+        if (dateA !== dateB) return dateA - dateB;
+
+        let catA = a.category || 'Uncategorized';
+        let catB = b.category || 'Uncategorized';
+        if (catA !== catB) return catA.localeCompare(catB);
+
+        let subA = a.subCategory || '';
+        let subB = b.subCategory || '';
+        if (subA !== subB) return subA.localeCompare(subB);
+
+        return a.name.localeCompare(b.name);
     });
 
     let todayTime = new Date().setHours(0,0,0,0);
     let lookAheadLimit = todayTime + (21 * 86400000); // Today + 21 days
 
-    // Grouping: Date -> Category -> SubCategory -> Tasks
-    let dateGroups = {};
-    displayTasks.forEach(task => {
-        let dStr = task.dueDate ? formatDateObj(task.dueDate) : 'No Date';
-        if (!dateGroups[dStr]) dateGroups[dStr] = [];
-        dateGroups[dStr].push(task);
-    });
-
     let htmlStr = '';
     let inLookAhead = false;
+    let currentCat = null;
+    let currentSub = null;
+    let currentDateStr = null;
+    let dayRowOpen = false;
 
-    Object.keys(dateGroups).forEach(dStr => {
-        let dayTasks = dateGroups[dStr];
-        let d = dStr !== 'No Date' ? new Date(dStr + 'T00:00:00') : null;
-        
-        let isPastDue = false;
-        let isLookAheadBlock = false;
+    displayTasks.forEach((task, index) => {
+        let dStr = task.dueDate ? formatDateObj(task.dueDate) : 'No Date';
+        let cat = task.category || 'Uncategorized';
+        let sub = task.subCategory || '';
 
-        if (d) {
-            let taskTime = d.getTime();
-            if (taskTime <= lookAheadLimit && taskTime >= todayTime) {
-                isLookAheadBlock = true;
-            }
-            if (taskTime < todayTime && dayTasks.some(t => !t.completed)) {
-                isPastDue = true;
-            }
-        }
+        let taskTime = task.dueDate ? task.dueDate.getTime() : null;
+        let isLookAheadTask = taskTime !== null && taskTime >= todayTime && taskTime <= lookAheadLimit;
 
-        // Close look-ahead wrapper if we exit the zone
-        if (inLookAhead && !isLookAheadBlock && d && d.getTime() > lookAheadLimit) {
+        // Check if we leave the look-ahead window
+        if (inLookAhead && !isLookAheadTask) {
+            if (dayRowOpen) { htmlStr += `</div></div>`; dayRowOpen = false; }
             htmlStr += `</div>`; // Close wrapper
             inLookAhead = false;
         }
 
-        // Open look-ahead wrapper if we enter the zone
-        if (!inLookAhead && isLookAheadBlock) {
-            htmlStr += `
-                <div class="look-ahead-wrapper">
-                    <div class="look-ahead-title">3-Week Look Ahead</div>
-            `;
-            inLookAhead = true;
+        let dateChanged = dStr !== currentDateStr;
+        let catChanged = cat !== currentCat;
+        let subChanged = catChanged || sub !== currentSub;
+
+        if (dateChanged || catChanged || subChanged) {
+            if (dayRowOpen) {
+                htmlStr += `</div></div>`;
+                dayRowOpen = false;
+            }
         }
 
-        let dayName = d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : '';
-        let dayNum = d ? d.getDate() : '';
-        let monthNum = d ? d.getMonth() + 1 : '';
-        let isToday = dStr === formatDateObj(new Date());
+        // Open Look-Ahead wrapper
+        if (!inLookAhead && isLookAheadTask) {
+            htmlStr += `<div class="look-ahead-wrapper"><div class="look-ahead-title">3-Week Look Ahead</div>`;
+            inLookAhead = true;
+            currentCat = null; currentSub = null; currentDateStr = null; // Force headers to reprint inside wrapper
+            catChanged = true; subChanged = true; dateChanged = true;
+        }
+
+        if (catChanged) {
+            htmlStr += `<div class="task-category-header">${cat}</div>`;
+            currentCat = cat;
+        }
+        if (subChanged && sub !== 'General' && sub !== '') {
+            htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
+            currentSub = sub;
+        }
+
+        if (dateChanged || catChanged || subChanged) {
+            let d = task.dueDate;
+            let dayName = d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : '';
+            let dayNum = d ? d.getDate() : '';
+            let monthNum = d ? d.getMonth() + 1 : '';
+            let isToday = dStr === formatDateObj(new Date());
+            let isPastDueBlock = d && d.getTime() < todayTime; 
+
+            let addBtnHtml = isGlobalView || dStr === 'No Date' ? '' : `<button class="add-task-inline-btn" onclick="openAddModal('${dStr}')" data-tooltip="Add Custom Task">+</button>`;
+
+            htmlStr += `
+                <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''}">
+                    <div class="agenda-day-left">
+                        <div class="agenda-date ${isPastDueBlock ? 'text-danger' : ''}">${dStr !== 'No Date' ? monthNum+'/'+dayNum : 'TBD'}</div>
+                        <div class="agenda-day-name ${isPastDueBlock ? 'text-danger' : ''}">${dayName}</div>
+                        ${addBtnHtml}
+                    </div>
+                    <div class="agenda-day-right">
+            `;
+            currentDateStr = dStr;
+            dayRowOpen = true;
+        }
+
+        // Render Task Row
+        let taskPastDue = !task.completed && task.dueDate && task.dueDate.getTime() < todayTime;
+        let rowClasses = 'task-row';
+        if (task.completed) rowClasses += ' completed';
+        if (taskPastDue) rowClasses += ' past-due';
+        if (!task.completed) rowClasses += ' incomplete-target';
+
+        let disabledAttr = isGlobalView ? 'disabled' : '';
+        let globalBadge = isGlobalView ? `<span class="task-project-badge">${task.projectTitle}</span>` : '';
+        let noteBtnText = task.notes && task.notes.trim() !== '' ? 'Edit Note' : '+ Note';
 
         htmlStr += `
-            <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''}">
-                <div class="agenda-day-left">
-                    <div class="agenda-date ${isPastDue ? 'text-danger' : ''}">${dStr !== 'No Date' ? monthNum+'/'+dayNum : 'TBD'}</div>
-                    <div class="agenda-day-name ${isPastDue ? 'text-danger' : ''}">${dayName}</div>
+            <div class="${rowClasses}" id="row-${task.id}">
+                <div class="task-main-line">
+                    <input type="checkbox" class="task-checkbox-lg" ${task.completed ? 'checked' : ''} ${disabledAttr} onchange="toggleTaskComplete('${task.id}', this.checked)">
+                    <div class="task-assignee-large">${task.assignee}</div>
+                    <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge}</div>
+                    <button class="note-toggle-btn" onclick="toggleNoteField('${task.id}')">[${noteBtnText}]</button>
                 </div>
-                <div class="agenda-day-right">
+                <div class="task-note-container" id="note-container-${task.id}" style="display: none;">
+                    <textarea class="task-notes-input-dark" placeholder="Add custom notes..." ${isGlobalView ? 'readonly' : ''} onblur="updateTaskNotes('${task.id}', this.value)">${task.notes}</textarea>
+                </div>
+            </div>
         `;
-
-        // Group by Category
-        let catGroups = {};
-        dayTasks.forEach(t => {
-            let cat = t.category || 'Uncategorized';
-            if (!catGroups[cat]) catGroups[cat] = {};
-            let sub = t.subCategory || 'General';
-            if (!catGroups[cat][sub]) catGroups[cat][sub] = [];
-            catGroups[cat][sub].push(t);
-        });
-
-        Object.keys(catGroups).forEach(cat => {
-            htmlStr += `<div class="task-category-header">${cat}</div>`;
-            
-            Object.keys(catGroups[cat]).forEach(sub => {
-                if (sub !== 'General' && sub !== '') {
-                    htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
-                }
-
-                catGroups[cat][sub].forEach(task => {
-                    let taskPastDue = !task.completed && d && d.getTime() < todayTime;
-                    let rowClasses = 'task-row';
-                    if (task.completed) rowClasses += ' completed';
-                    if (taskPastDue) rowClasses += ' past-due';
-                    if (!task.completed) rowClasses += ' incomplete-target'; // Marker for scroll
-
-                    let disabledAttr = isGlobalView ? 'disabled' : '';
-                    let globalBadge = isGlobalView ? `<span class="task-project-badge">${task.projectTitle}</span>` : '';
-                    let noteBtnText = task.notes && task.notes.trim() !== '' ? 'Edit Note' : '+ Note';
-
-                    htmlStr += `
-                        <div class="${rowClasses}" id="row-${task.id}">
-                            <div class="task-main-line">
-                                <input type="checkbox" class="task-checkbox-lg" ${task.completed ? 'checked' : ''} ${disabledAttr} onchange="toggleTaskComplete('${task.id}', this.checked)">
-                                <div class="task-assignee-large">${task.assignee}</div>
-                                <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge}</div>
-                                <button class="note-toggle-btn" onclick="toggleNoteField('${task.id}')">[${noteBtnText}]</button>
-                            </div>
-                            <div class="task-note-container" id="note-container-${task.id}" style="display: none;">
-                                <textarea class="task-notes-input-dark" placeholder="Add custom notes..." ${isGlobalView ? 'readonly' : ''} onblur="updateTaskNotes('${task.id}', this.value)">${task.notes}</textarea>
-                            </div>
-                        </div>
-                    `;
-                });
-            });
-        });
-
-        htmlStr += `</div></div>`; // Close day row
     });
 
-    if (inLookAhead) {
-        htmlStr += `</div>`; // Close wrapper if ended inside
-    }
+    if (dayRowOpen) htmlStr += `</div></div>`;
+    if (inLookAhead) htmlStr += `</div>`;
 
     tasksContainer.innerHTML = htmlStr;
     updateHeaderStats();
@@ -452,7 +479,6 @@ window.updateTaskNotes = function(taskId, val) {
             t.notes = val;
             triggerGlideSave(); 
             
-            // Silently update the button text without re-rendering everything
             let row = document.getElementById(`row-${taskId}`);
             if (row) {
                 let btn = row.querySelector('.note-toggle-btn');
@@ -467,14 +493,14 @@ function triggerGlideSave() {
 
     let payloadToSave = mergedTasks.map(t => {
         if (t.isCustom) {
-            return { id: t.id, isCustom: true, name: t.name, assignee: t.assignee, wks: t.wks, completed: t.completed, notes: t.notes };
+            return { id: t.id, isCustom: true, name: t.name, assignee: t.assignee, targetDateStr: t.targetDateStr, completed: t.completed, notes: t.notes };
         } else {
             return { id: t.id, completed: t.completed, notes: t.notes };
         }
     });
 
     let todayTime = new Date().setHours(0,0,0,0);
-    let actionRequiredCount = mergedTasks.filter(t => !t.completed && t.dueDate && t.dueDate.getTime() <= todayTime).length;
+    let actionRequiredCount = mergedTasks.filter(t => !t.completed && t.dueDate && t.dueDate.getTime() < todayTime).length;
 
     const mutation = {
         tableName: GLIDE_TABLE_ID_PROJECTS,
@@ -508,15 +534,29 @@ function setupEventListeners() {
             if (!hideCompleted) scrollToFirstIncomplete();
         });
     }
+
+    if (assigneeFilter) {
+        assigneeFilter.addEventListener('change', function() {
+            currentAssigneeFilter = this.value;
+            renderTasks();
+        });
+    }
+    
+    const projFilter = document.getElementById('project-filter');
+    if (projFilter) {
+        projFilter.addEventListener('change', function() {
+            renderTasks();
+        });
+    }
 }
 
 function generateId() { return 'task_' + Math.random().toString(36).substr(2, 9); }
 
-window.openAddModal = function() {
+window.openAddModal = function(dateStr) {
     if (!projectNumber || isGlobalView) return;
     document.getElementById('add-name').value = '';
     document.getElementById('add-assignee').value = '';
-    document.getElementById('add-wks').value = '0';
+    document.getElementById('add-target-date').value = dateStr;
     modalOverlay.classList.remove('hidden');
     addModal.classList.remove('hidden');
 }
@@ -529,19 +569,19 @@ window.closeModals = function() {
 window.saveCustomTask = function() {
     const name = document.getElementById('add-name').value.trim();
     const assignee = document.getElementById('add-assignee').value.trim();
-    const wks = parseInt(document.getElementById('add-wks').value) || 0;
+    const targetDateStr = document.getElementById('add-target-date').value;
 
     if (!name) return alert("Task name is required.");
 
-    let dueDate = calculateDueDate(projectStartDate, wks);
+    let dueDate = (targetDateStr && targetDateStr !== 'No Date') ? new Date(targetDateStr + 'T00:00:00') : null;
 
     mergedTasks.push({
         id: generateId(),
         category: 'Custom Tasks',
         subCategory: '',
         name: name,
-        wks: wks,
         assignee: assignee || 'Unassigned',
+        targetDateStr: targetDateStr,
         dueDate: dueDate,
         completed: false,
         notes: "",
@@ -549,7 +589,7 @@ window.saveCustomTask = function() {
     });
 
     closeModals();
-    processAndMergeData(); 
+    renderTasks(); 
     triggerGlideSave();
 }
 
