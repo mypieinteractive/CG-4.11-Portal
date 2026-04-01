@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.37 */
-/* Changes: Re-organized mobile CSS orders so #collapse-btn maps securely to order 3, with #stats-toggle-btn mapping to 4. This guarantees they stay side-by-side cleanly in standard calendar mode, and when #collapse-btn is stripped in agenda-mode, #stats-toggle-btn and #event-type-filter naturally fill the row. */
+/* Version: V1.38 */
+/* Changes: Preserved entire calendar structural CSS. Appended specific task-tracker modular UI elements (.task-card, .task-notes-wrapper, .task-checkbox) to cleanly piggyback on the native variable system and dark mode schema. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -234,8 +234,6 @@ body.agenda-mode #collapse-btn { display: none !important; }
 
 /* 2. view-events (Hide Notes) */
 .calendar-grid.view-events .event-notes { display: none !important; }
-
-/* 3. view-notes (Default: Do nothing, let everything show) */
 
 /* 3-Week Look Ahead Highlight Wrapper */
 .look-ahead-wrapper {
@@ -560,6 +558,156 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     font-weight: 500;
 }
 
+/* ===== TASK TRACKER SPECIFIC STYLES ===== */
+
+.tasks-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 80vh; /* Scroll padding */
+}
+
+.empty-agenda-text {
+    text-align: center;
+    padding: 40px 20px;
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+    border: 1px dashed var(--border-color);
+}
+
+.task-card {
+    background-color: var(--card-color);
+    border-radius: 6px;
+    border-left: 4px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.task-card.task-past-due {
+    border-left: 4px solid #E74C3C;
+    background-color: rgba(231, 76, 60, 0.05);
+}
+
+.task-card.task-look-ahead {
+    border-left: 4px solid var(--accent-color);
+}
+
+.task-card.task-completed {
+    opacity: 0.5;
+    border-left: 4px solid var(--accepted-color);
+}
+.task-card.task-completed .task-name {
+    text-decoration: line-through;
+}
+
+.task-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.task-checkbox {
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    accent-color: var(--accent-color);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.task-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.task-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.task-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.task-assignee-badge {
+    background: rgba(255,255,255,0.1);
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.task-project-badge {
+    background: var(--accent-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.task-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.task-date {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.text-danger {
+    color: #E74C3C !important;
+}
+
+.task-notes-wrapper {
+    margin-left: 37px; /* Align with text, bypassing checkbox */
+}
+
+.task-notes-input {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid transparent;
+    color: var(--text-primary);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    resize: vertical;
+    min-height: 40px;
+    transition: all 0.2s ease;
+    font-style: italic;
+}
+
+.task-notes-input:focus {
+    border-color: var(--accent-color);
+    background: var(--bg-color);
+    outline: none;
+}
+
+.task-notes-input:hover:not(:focus) {
+    background: rgba(255,255,255,0.06);
+}
+
 /* Mobile Media Queries */
 @media (max-width: 768px) {
     .header-action-row { display: flex; flex-direction: column; align-items: stretch; }
@@ -569,9 +717,9 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     .action-buttons-group > * { flex: 0 0 auto; }
 
     /* Default Calendar Mobile Layout */
+    #collapse-btn { width: calc(50% - 5px); order: 3; justify-content: center; }
     #view-toggle-btn { width: 100%; order: 1; justify-content: center; }
     #event-type-filter { width: 100%; order: 2; }
-    #collapse-btn { width: calc(50% - 5px); order: 3; justify-content: center; }
     #stats-toggle-btn { width: calc(50% - 5px); order: 4; justify-content: center; }
     #upload-btn { width: calc(50% - 5px); order: 5; justify-content: center; }
     .global-add-btn { width: calc(50% - 5px); order: 6; justify-content: center; }
@@ -580,4 +728,6 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     body.agenda-mode #event-type-filter { width: calc(50% - 5px); order: 2; }
     body.agenda-mode #stats-toggle-btn { width: calc(50% - 5px); order: 4; }
     body.agenda-mode #collapse-btn { display: none !important; }
+
+    .task-notes-wrapper { margin-left: 0; }
 }
