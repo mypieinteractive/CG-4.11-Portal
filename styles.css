@@ -1,8 +1,8 @@
 /* File: styles.css */
-/* Version: V1.41 */
-/* Description: Full Unified Stylesheet. Retains 100% of Calendar Layout parameters. Tasks tracker logic appended securely to bottom. */
+/* Version: V1.43 */
+/* Changes: Reverted mobile width constraint logic for pure agenda mode to force exactly 50% grid squares as requested. */
 :root {
-    --bg-color: #0A0A0A;
+    --bg-color: transparent;
     --surface-color: #1E1E2F;
     --card-color: #2A2A40;
     --text-primary: #FFFFFF;
@@ -35,7 +35,11 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     position: sticky;
     top: 0;
     z-index: 100;
-    background-color: var(--bg-color); 
+    background-color: transparent; 
+    background: rgba(20, 20, 25, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
     width: 100vw;
     margin-left: calc(-50vw + 50%);
     margin-bottom: 5px; 
@@ -59,7 +63,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     justify-content: center;
     padding: 15px 0;
     gap: 12px;
-    background: var(--bg-color); 
+    background: transparent; 
 }
 .spinner {
     width: 28px;
@@ -78,7 +82,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     flex-direction: column;
     gap: 5px;
     padding: 5px 0 15px 0;
-    background-color: var(--bg-color);
+    background-color: transparent;
     width: 100%;
 }
 
@@ -97,7 +101,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     gap: 15px;
 }
 
-.header-left { display: flex; align-items: center; flex: 1; min-width: 220px; }
+.header-left { display: flex; align-items: center; flex: 1 1 auto; min-width: auto; margin-right: 5px; }
 .date-progress-wrapper { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 300px;}
 .range-label { font-size: 0.9rem; font-weight: 500; color: var(--text-primary); margin-top: 0; }
 
@@ -116,7 +120,7 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     flex-wrap: wrap;
     justify-content: flex-end;
     align-items: flex-end; 
-    flex: 2;
+    flex: 1 1 auto;
 }
 
 .action-buttons-group {
@@ -126,8 +130,6 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     justify-content: flex-end;
     align-items: center;
 }
-
-.mobile-wrap-group, .mobile-btn-row { display: flex; gap: 10px; }
 
 /* Subtle styling for Dropdowns and Text Actions */
 .header-action-btn {
@@ -223,9 +225,6 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 .calendar-grid.hide-stats .header-totals,
 .calendar-grid.hide-stats .event-stats { display: none !important; }
 
-/* Agenda Mode Overrides */
-body.agenda-mode #collapse-btn { display: none !important; }
-
 /* 3-Way Cycle Overrides */
 /* 1. view-minimized (Ultra-collapsed) */
 .calendar-grid.view-minimized .week-container { grid-template-rows: min-content !important; gap: 5px; }
@@ -234,6 +233,8 @@ body.agenda-mode #collapse-btn { display: none !important; }
 
 /* 2. view-events (Hide Notes) */
 .calendar-grid.view-events .event-notes { display: none !important; }
+
+/* 3. view-notes (Default: Do nothing, let everything show) */
 
 /* 3-Week Look Ahead Highlight Wrapper */
 .look-ahead-wrapper {
@@ -251,7 +252,7 @@ body.agenda-mode #collapse-btn { display: none !important; }
     position: absolute;
     top: -12px;
     left: 15px;
-    background-color: var(--bg-color);
+    background-color: var(--surface-color);
     color: var(--accent-color);
     padding: 0 10px;
     font-size: 0.9rem;
@@ -400,8 +401,8 @@ body.agenda-mode #collapse-btn { display: none !important; }
 .agenda-day-row.empty-agenda-row { opacity: 0.5; }
 
 .agenda-day-left { width: 50px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
-.agenda-date { font-size: 1.1rem; font-weight: bold; color: var(--text-primary); }
-.agenda-day-name { font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; }
+.agenda-date { font-size: 1rem; font-weight: bold; color: var(--text-primary); text-align: center; }
+.agenda-day-name { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; display: none; } /* Removed per request */
 
 .agenda-daily-stats { display: flex; gap: 4px; margin-top: 8px; justify-content: center; flex-wrap: wrap; }
 .calendar-grid.hide-stats .agenda-daily-stats { display: none !important; }
@@ -462,7 +463,7 @@ body.agenda-mode #collapse-btn { display: none !important; }
 .form-row { display: flex; gap: 15px; }
 .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; }
 .form-group label { font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; }
-.form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--bg-color); border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; }
+.form-group input, .form-group textarea, .form-group select { width: 100%; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; }
 .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--accent-color); }
 .form-group textarea { resize: vertical; }
 
@@ -495,7 +496,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 .daily-stat-row-top { display: flex; align-items: center; gap: 15px; }
 .stat-date-label { width: 45px; font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); }
-.edit-note-input { width: 100%; background: var(--bg-color); border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; resize: vertical; }
+.edit-note-input { width: 100%; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; resize: vertical; }
 .edit-note-input:focus { border-color: var(--accent-color); }
 
 /* Inline Stat Editors */
@@ -531,10 +532,10 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     left: 50%;
     transform: translateX(-50%) translateY(4px);
     margin-bottom: 6px;
-    padding: 4px 6px; /* Reduced padding */
+    padding: 4px 6px; 
     background: #FFFFFF;
     color: #000000;
-    font-size: 0.65rem; /* Reduced font size */
+    font-size: 0.65rem; 
     font-weight: 700;
     white-space: nowrap;
     border-radius: 4px;
@@ -600,7 +601,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     color: var(--text-secondary);
     margin-top: 8px;
     margin-bottom: 6px;
-    margin-left: 65px; 
+    margin-left: 65px; /* Aligns with tasks block */
     text-transform: uppercase;
 }
 
@@ -713,7 +714,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 
 .task-notes-input-dark {
     width: 100%;
-    background: var(--bg-color);
+    background: rgba(0,0,0,0.25);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 10px 12px;
@@ -747,29 +748,41 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 
 
-/* Mobile Media Queries - Shared Base & Overrides */
+/* Progressive Standard View Narrowing */
+@media (max-width: 950px) {
+    body:not(.agenda-mode) .upload-text-prefix { display: none; }
+}
+
 @media (max-width: 768px) {
-    .header-action-row { display: flex; flex-direction: column; align-items: stretch; }
-    #project-filter { width: 100%; margin-bottom: 5px; }
+    body:not(.agenda-mode) .header-main-row { gap: 10px; flex-wrap: wrap; }
+    body:not(.agenda-mode) .header-action-row { flex: 1 1 auto; justify-content: flex-end; }
     
-    .action-buttons-group { width: 100%; justify-content: flex-start; }
-    .action-buttons-group > * { flex: 0 0 auto; }
-
-    /* Default Calendar Mobile Layout */
-    #collapse-btn { width: calc(50% - 5px); order: 3; justify-content: center; }
-    #view-toggle-btn { width: 100%; order: 1; justify-content: center; }
-    #event-type-filter { width: 100%; order: 2; }
-    #stats-toggle-btn { width: calc(50% - 5px); order: 4; justify-content: center; }
-    #upload-btn { width: calc(50% - 5px); order: 5; justify-content: center; }
-    .global-add-btn { width: calc(50% - 5px); order: 6; justify-content: center; }
-
-    /* Default Agenda Mobile Layout */
-    body.agenda-mode #event-type-filter { width: calc(50% - 5px); order: 2; }
-    body.agenda-mode #stats-toggle-btn { width: calc(50% - 5px); order: 4; }
-    body.agenda-mode #collapse-btn { display: none !important; }
-
-    /* Tasks Tracker Mobile Overrides */
-    #assignee-filter { width: 100%; order: 2; }
+    body:not(.agenda-mode) .upload-text { display: none; }
+    body:not(.agenda-mode) .upload-module { padding: 6px 10px; min-width: auto; }
     
-    .task-notes-wrapper { margin-left: 0; }
+    body:not(.agenda-mode) #project-filter { width: 100%; margin-bottom: 5px; }
+}
+
+@media (max-width: 600px) {
+    body:not(.agenda-mode) #view-toggle-btn span, 
+    body:not(.agenda-mode) #stats-toggle-btn span, 
+    body:not(.agenda-mode) #collapse-btn span { display: none; }
+    body:not(.agenda-mode) .header-action-btn { padding: 6px 10px; }
+    body:not(.agenda-mode) select.header-action-btn { padding-right: 10px; background-image: none; }
+}
+
+/* Mobile View (Strict Agenda Mode Grid) */
+@media (max-width: 768px) {
+    body.agenda-mode .header-action-row { display: flex; flex-direction: column; align-items: stretch; }
+    body.agenda-mode .action-buttons-group { width: 100%; justify-content: space-between; }
+    
+    /* Forces exactly 50% width on all buttons in the agenda-mode action group */
+    body.agenda-mode .action-buttons-group > * {
+        width: calc(50% - 5px) !important;
+        justify-content: center;
+        flex: 0 0 auto;
+    }
+    
+    body.agenda-mode #project-filter { width: 100% !important; margin-bottom: 5px; }
+    body.agenda-mode .task-notes-wrapper { margin-left: 0; }
 }
