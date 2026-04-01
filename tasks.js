@@ -1,6 +1,6 @@
 // File: tasks.js
-// Version: V1.0
-// Description: Logic engine for the Implementation Task Tracker. Queries Projects and Master Tasks tables, calculates dynamic due dates based on start date and week offsets, merges JSON state, and handles API writes for task completion and notes.
+// Version: V1.1
+// Description: Logic engine for the Implementation Task Tracker. Groups by Date > Category > SubCategory. Autoscrolls to the first incomplete task on load.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -19,13 +19,14 @@ const viewToggleBtn = document.getElementById('view-toggle-btn');
 let projectNumber = null;
 let projectTitle = null;
 let isGlobalView = false;
-let hideCompleted = true; // Default to hiding completed tasks
+let hideCompleted = false; // Default to FALSE so historical tasks are present to be scrolled up to
 
 let masterTasks = [];
 let projectsData = [];
 let mergedTasks = [];
 let activeProjectRowId = null;
 let projectStartDate = null;
+let initialRenderDone = false;
 
 function init() {
     extractProjectNumber();
@@ -34,7 +35,7 @@ function init() {
     if (projectNumber) {
         if (String(projectNumber).toLowerCase().trim() === 'global') {
             isGlobalView = true;
-            document.getElementById('add-task-btn').style.display = 'none'; // Hide add button in global view
+            document.getElementById('add-task-btn').style.display = 'none'; 
             document.getElementById('main-title-group').style.display = 'none';
         }
         fetchDatabaseData();
@@ -90,7 +91,6 @@ async function fetchDatabaseData() {
         projectsData = result[0]?.rows || [];
         const rawTasks = result[1]?.rows || [];
 
-        // Parse Master Tasks
         masterTasks = rawTasks.map(r => ({
             id: r['$rowID'],
             category: r['vmA2P'] || 'Uncategorized',
@@ -117,6 +117,13 @@ function calculateDueDate(startDateStr, wks) {
     return start;
 }
 
+function formatDateObj(date) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 function processAndMergeData() {
     mergedTasks = [];
 
@@ -132,13 +139,11 @@ function processAndMergeData() {
             let jsonArr = [];
             try { jsonArr = JSON.parse(jsonStr) || []; } catch(e) {}
 
-            // Process Master Tasks for this project
             masterTasks.forEach(mt => {
                 let savedState = jsonArr.find(j => j.id === mt.id);
                 let isCompleted = savedState ? !!savedState.completed : false;
                 
-                // Skip completed tasks for Global View
-                if (isCompleted) return; 
+                if (isCompleted && hideCompleted) return; 
 
                 let dueDate = calculateDueDate(startStr, mt.wks);
                 mergedTasks.push({
@@ -146,27 +151,28 @@ function processAndMergeData() {
                     projectId: pid,
                     projectTitle: ptitle,
                     dueDate: dueDate,
-                    completed: false,
+                    completed: isCompleted,
                     notes: savedState ? savedState.notes : "",
                     isCustom: false
                 });
             });
 
-            // Process Custom Tasks for this project
             let customTasks = jsonArr.filter(j => j.isCustom);
             customTasks.forEach(ct => {
-                if (ct.completed) return; // Skip completed
+                if (ct.completed && hideCompleted) return;
 
                 let dueDate = calculateDueDate(startStr, ct.wks);
                 mergedTasks.push({
                     id: ct.id,
+                    category: 'Custom',
+                    subCategory: '',
                     projectId: pid,
                     projectTitle: ptitle,
                     name: ct.name,
                     wks: ct.wks,
                     assignee: ct.assignee,
                     dueDate: dueDate,
-                    completed: false,
+                    completed: !!ct.completed,
                     notes: ct.notes || "",
                     isCustom: true
                 });
@@ -174,7 +180,6 @@ function processAndMergeData() {
         });
 
     } else {
-        // Single Project View
         let activeProj = projectsData.find(p => p['$rowID'] === projectNumber || (p['2UR8V'] && p['2UR8V'] === projectNumber));
         
         if (!activeProj) {
@@ -197,7 +202,6 @@ function processAndMergeData() {
         let jsonArr = [];
         try { jsonArr = JSON.parse(jsonStr) || []; } catch(e) {}
 
-        // Map Master Tasks
         masterTasks.forEach(mt => {
             let savedState = jsonArr.find(j => j.id === mt.id);
             let dueDate = calculateDueDate(projectStartDate, mt.wks);
@@ -210,12 +214,13 @@ function processAndMergeData() {
             });
         });
 
-        // Map Custom Tasks
         let customTasks = jsonArr.filter(j => j.isCustom);
         customTasks.forEach(ct => {
             let dueDate = calculateDueDate(projectStartDate, ct.wks);
             mergedTasks.push({
                 id: ct.id,
+                category: 'Custom',
+                subCategory: '',
                 name: ct.name,
                 wks: ct.wks,
                 assignee: ct.assignee,
@@ -227,24 +232,20 @@ function processAndMergeData() {
         });
     }
 
-    // Master Sort: Incomplete first, then by Due Date, then by Name
-    mergedTasks.sort((a, b) => {
-        if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        let dateA = a.dueDate ? a.dueDate.getTime() : 9999999999999;
-        let dateB = b.dueDate ? b.dueDate.getTime() : 9999999999999;
-        if (dateA !== dateB) return dateA - dateB;
-        return a.name.localeCompare(b.name);
-    });
-
     setHeaderLoading(false);
     renderTasks();
+
+    if (!initialRenderDone) {
+        initialRenderDone = true;
+        scrollToFirstIncomplete();
+    }
 }
 
 function renderTasks() {
     tasksContainer.innerHTML = '';
     
     let displayTasks = mergedTasks;
-    if (hideCompleted && !isGlobalView) {
+    if (hideCompleted) {
         displayTasks = displayTasks.filter(t => !t.completed);
     }
 
@@ -254,69 +255,158 @@ function renderTasks() {
         return;
     }
 
+    // Sort by Due Date
+    displayTasks.sort((a, b) => {
+        let dateA = a.dueDate ? a.dueDate.getTime() : 9999999999999;
+        let dateB = b.dueDate ? b.dueDate.getTime() : 9999999999999;
+        return dateA - dateB;
+    });
+
     let todayTime = new Date().setHours(0,0,0,0);
     let lookAheadLimit = todayTime + (21 * 86400000); // Today + 21 days
 
-    let htmlStr = '';
-
+    // Grouping: Date -> Category -> SubCategory -> Tasks
+    let dateGroups = {};
     displayTasks.forEach(task => {
-        let taskTime = task.dueDate ? task.dueDate.setHours(0,0,0,0) : null;
-        let cardClass = 'task-card';
+        let dStr = task.dueDate ? formatDateObj(task.dueDate) : 'No Date';
+        if (!dateGroups[dStr]) dateGroups[dStr] = [];
+        dateGroups[dStr].push(task);
+    });
+
+    let htmlStr = '';
+    let inLookAhead = false;
+
+    Object.keys(dateGroups).forEach(dStr => {
+        let dayTasks = dateGroups[dStr];
+        let d = dStr !== 'No Date' ? new Date(dStr + 'T00:00:00') : null;
         
         let isPastDue = false;
-        let isLookAhead = false;
+        let isLookAheadBlock = false;
 
-        if (task.completed) {
-            cardClass += ' task-completed';
-        } else if (taskTime !== null) {
-            if (taskTime < todayTime) {
-                cardClass += ' task-past-due';
+        if (d) {
+            let taskTime = d.getTime();
+            if (taskTime <= lookAheadLimit && taskTime >= todayTime) {
+                isLookAheadBlock = true;
+            }
+            if (taskTime < todayTime && dayTasks.some(t => !t.completed)) {
                 isPastDue = true;
-            } else if (taskTime <= lookAheadLimit) {
-                cardClass += ' task-look-ahead';
-                isLookAhead = true;
             }
         }
 
-        let dateDisplay = task.dueDate ? task.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No Date';
-        if (isPastDue) dateDisplay = `⚠️ Past Due (${dateDisplay})`;
+        // Close look-ahead wrapper if we exit the zone
+        if (inLookAhead && !isLookAheadBlock && d && d.getTime() > lookAheadLimit) {
+            htmlStr += `</div>`; // Close wrapper
+            inLookAhead = false;
+        }
 
-        let checkedAttr = task.completed ? 'checked' : '';
-        let disabledAttr = isGlobalView ? 'disabled' : '';
-        let globalBadge = isGlobalView ? `<span class="task-project-badge">${task.projectTitle}</span>` : '';
-        
-        // Prevent typing in global mode
-        let notesDisabledAttr = isGlobalView ? 'readonly' : '';
+        // Open look-ahead wrapper if we enter the zone
+        if (!inLookAhead && isLookAheadBlock) {
+            htmlStr += `
+                <div class="look-ahead-wrapper">
+                    <div class="look-ahead-title">3-Week Look Ahead</div>
+            `;
+            inLookAhead = true;
+        }
+
+        let dayName = d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : '';
+        let dayNum = d ? d.getDate() : '';
+        let monthNum = d ? d.getMonth() + 1 : '';
+        let isToday = dStr === formatDateObj(new Date());
 
         htmlStr += `
-            <div class="${cardClass}">
-                <div class="task-header">
-                    <input type="checkbox" class="task-checkbox" ${checkedAttr} ${disabledAttr} onchange="toggleTaskComplete('${task.id}', this.checked)">
-                    <div class="task-info">
-                        <div class="task-title-row">
-                            <div class="task-name">${task.name}</div>
-                            <div class="task-assignee-badge">${task.assignee}</div>
-                        </div>
-                        <div class="task-meta-row">
-                            <span class="task-date ${isPastDue ? 'text-danger' : ''}">${dateDisplay}</span>
-                            ${globalBadge}
-                        </div>
-                    </div>
+            <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''}">
+                <div class="agenda-day-left">
+                    <div class="agenda-date ${isPastDue ? 'text-danger' : ''}">${dStr !== 'No Date' ? monthNum+'/'+dayNum : 'TBD'}</div>
+                    <div class="agenda-day-name ${isPastDue ? 'text-danger' : ''}">${dayName}</div>
                 </div>
-                <div class="task-notes-wrapper">
-                    <textarea class="task-notes-input" placeholder="Add project-specific notes here..." ${notesDisabledAttr} onblur="updateTaskNotes('${task.id}', this.value)">${task.notes}</textarea>
-                </div>
-            </div>
+                <div class="agenda-day-right">
         `;
+
+        // Group by Category
+        let catGroups = {};
+        dayTasks.forEach(t => {
+            let cat = t.category || 'Uncategorized';
+            if (!catGroups[cat]) catGroups[cat] = {};
+            let sub = t.subCategory || 'General';
+            if (!catGroups[cat][sub]) catGroups[cat][sub] = [];
+            catGroups[cat][sub].push(t);
+        });
+
+        Object.keys(catGroups).forEach(cat => {
+            htmlStr += `<div class="task-category-header">${cat}</div>`;
+            
+            Object.keys(catGroups[cat]).forEach(sub => {
+                if (sub !== 'General' && sub !== '') {
+                    htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
+                }
+
+                catGroups[cat][sub].forEach(task => {
+                    let taskPastDue = !task.completed && d && d.getTime() < todayTime;
+                    let rowClasses = 'task-row';
+                    if (task.completed) rowClasses += ' completed';
+                    if (taskPastDue) rowClasses += ' past-due';
+                    if (!task.completed) rowClasses += ' incomplete-target'; // Marker for scroll
+
+                    let disabledAttr = isGlobalView ? 'disabled' : '';
+                    let globalBadge = isGlobalView ? `<span class="task-project-badge">${task.projectTitle}</span>` : '';
+                    let noteBtnText = task.notes && task.notes.trim() !== '' ? 'Edit Note' : '+ Note';
+
+                    htmlStr += `
+                        <div class="${rowClasses}" id="row-${task.id}">
+                            <div class="task-main-line">
+                                <input type="checkbox" class="task-checkbox-lg" ${task.completed ? 'checked' : ''} ${disabledAttr} onchange="toggleTaskComplete('${task.id}', this.checked)">
+                                <div class="task-assignee-large">${task.assignee}</div>
+                                <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge}</div>
+                                <button class="note-toggle-btn" onclick="toggleNoteField('${task.id}')">[${noteBtnText}]</button>
+                            </div>
+                            <div class="task-note-container" id="note-container-${task.id}" style="display: none;">
+                                <textarea class="task-notes-input-dark" placeholder="Add custom notes..." ${isGlobalView ? 'readonly' : ''} onblur="updateTaskNotes('${task.id}', this.value)">${task.notes}</textarea>
+                            </div>
+                        </div>
+                    `;
+                });
+            });
+        });
+
+        htmlStr += `</div></div>`; // Close day row
     });
+
+    if (inLookAhead) {
+        htmlStr += `</div>`; // Close wrapper if ended inside
+    }
 
     tasksContainer.innerHTML = htmlStr;
     updateHeaderStats();
 }
 
+function scrollToFirstIncomplete() {
+    setTimeout(() => {
+        let firstIncomplete = document.querySelector('.incomplete-target');
+        if (firstIncomplete) {
+            let headerOffset = document.querySelector('.sticky-top-section').offsetHeight + 20;
+            let elementPosition = firstIncomplete.getBoundingClientRect().top;
+            let offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+            window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+        }
+    }, 100);
+}
+
+window.toggleNoteField = function(taskId) {
+    const container = document.getElementById(`note-container-${taskId}`);
+    if (container) {
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            let ta = container.querySelector('textarea');
+            if (ta) ta.focus();
+        } else {
+            container.style.display = 'none';
+        }
+    }
+}
+
 function updateHeaderStats() {
     if (isGlobalView) {
-        tasksStatus.innerText = `${mergedTasks.length} Global Active Tasks`;
+        tasksStatus.innerText = `${mergedTasks.length} Global Tasks`;
         return;
     }
 
@@ -349,14 +439,6 @@ window.toggleTaskComplete = function(taskId, isChecked) {
     let t = mergedTasks.find(x => x.id === taskId);
     if (t) {
         t.completed = isChecked;
-        // Re-sort and render so it moves to the bottom/disappears
-        mergedTasks.sort((a, b) => {
-            if (a.completed !== b.completed) return a.completed ? 1 : -1;
-            let dateA = a.dueDate ? a.dueDate.getTime() : 9999999999999;
-            let dateB = b.dueDate ? b.dueDate.getTime() : 9999999999999;
-            if (dateA !== dateB) return dateA - dateB;
-            return a.name.localeCompare(b.name);
-        });
         renderTasks(); 
         triggerGlideSave();
     }
@@ -368,7 +450,14 @@ window.updateTaskNotes = function(taskId, val) {
     if (t) {
         if (t.notes !== val) {
             t.notes = val;
-            triggerGlideSave(); // Save strictly in background, do not re-render to save cursor focus
+            triggerGlideSave(); 
+            
+            // Silently update the button text without re-rendering everything
+            let row = document.getElementById(`row-${taskId}`);
+            if (row) {
+                let btn = row.querySelector('.note-toggle-btn');
+                if (btn) btn.innerText = val.trim() !== '' ? '[Edit Note]' : '[+ Note]';
+            }
         }
     }
 };
@@ -384,7 +473,6 @@ function triggerGlideSave() {
         }
     });
 
-    // Calculate due/past due count for the sZTch column
     let todayTime = new Date().setHours(0,0,0,0);
     let actionRequiredCount = mergedTasks.filter(t => !t.completed && t.dueDate && t.dueDate.getTime() <= todayTime).length;
 
@@ -416,13 +504,8 @@ function setupEventListeners() {
         viewToggleBtn.addEventListener('click', function() {
             hideCompleted = !hideCompleted;
             document.getElementById('view-toggle-text').innerText = hideCompleted ? "Show Completed" : "Hide Completed";
-            
-            if(hideCompleted) {
-                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg><span id="view-toggle-text">Show Completed</span>`;
-            } else {
-                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg><span id="view-toggle-text">Hide Completed</span>`;
-            }
             renderTasks();
+            if (!hideCompleted) scrollToFirstIncomplete();
         });
     }
 }
@@ -454,6 +537,8 @@ window.saveCustomTask = function() {
 
     mergedTasks.push({
         id: generateId(),
+        category: 'Custom Tasks',
+        subCategory: '',
         name: name,
         wks: wks,
         assignee: assignee || 'Unassigned',
@@ -463,16 +548,8 @@ window.saveCustomTask = function() {
         isCustom: true
     });
 
-    mergedTasks.sort((a, b) => {
-        if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        let dateA = a.dueDate ? a.dueDate.getTime() : 9999999999999;
-        let dateB = b.dueDate ? b.dueDate.getTime() : 9999999999999;
-        if (dateA !== dateB) return dateA - dateB;
-        return a.name.localeCompare(b.name);
-    });
-
     closeModals();
-    renderTasks();
+    processAndMergeData(); 
     triggerGlideSave();
 }
 
