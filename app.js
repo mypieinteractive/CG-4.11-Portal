@@ -1,8 +1,7 @@
 // File: app.js
-// Version: V2.27
-// Changes: No structural JS logic updates required for flex-order swapping.
+// Version: V2.28
+// Description: Matches tasks.js sorting capabilities (Start Date descending in dropdowns). Implements full Project Titles in Global dropdown. Dynamically hides global badge text and reveals the inline date-column '+' add button in the Agenda view when a specific project is selected during Global view.
 
-// Config (Glide v2 API)
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID = 'native-table-jl3zoddzYY6WxSA4YQZj';
 const GLIDE_TOKEN = '77804d07-3b60-415c-a8f8-4f84f33b974a';
@@ -95,7 +94,7 @@ function setHeaderLoading(isLoading) {
     if (isLoading) {
         if(loader) loader.style.display = 'flex';
         if(content) content.style.display = 'none';
-        calendarGrid.innerHTML = ''; // Forces a redraw boundary
+        calendarGrid.innerHTML = ''; 
     } else {
         if(loader) loader.style.display = 'none';
         if(content) content.style.display = 'block';
@@ -153,7 +152,8 @@ async function fetchDatabaseData() {
             }
 
             if (!projectsList.find(p => p.id === pid)) {
-                projectsList.push({ id: pid, title: ptitle });
+                let sDate = row['GgPWW'] ? new Date(row['GgPWW']).getTime() : 0;
+                projectsList.push({ id: pid, title: ptitle, startDate: sDate });
             }
 
             if (rawJson) {
@@ -183,7 +183,7 @@ async function fetchDatabaseData() {
         }
 
         if (!isGlobalView && !projectsList.find(p => p.id === projectNumber)) {
-            projectsList.push({ id: projectNumber, title: projectTitle });
+            projectsList.push({ id: projectNumber, title: projectTitle, startDate: 0 });
         }
 
         populateProjectDropdowns();
@@ -208,6 +208,9 @@ function populateProjectDropdowns() {
     const upSel = document.getElementById('upload-project-select');
 
     if(!filter) return;
+
+    // Sort projects newest to oldest
+    projectsList.sort((a, b) => b.startDate - a.startDate);
 
     let opts = '';
     projectsList.forEach(p => {
@@ -287,7 +290,7 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
         }
         
         setHeaderLoading(false);
-        renderCalendar(); // Redraw immediately so screen doesn't stay blank
+        renderCalendar(); 
     } catch (error) {
         console.error('Save Error:', error);
         setHeaderLoading(false);
@@ -584,20 +587,31 @@ function processData(data, pId, pTitle) {
 }
 
 // ADD Modal Logic
-function openAddModal() {
+window.openAddModal = function(dateStr) {
     if (!projectNumber) return alert("Please add a ?project=XYZ variable to your URL to begin working.");
 
-    if (isGlobalView) {
+    const projFilterEl = document.getElementById('project-filter');
+    let isProjFiltered = isGlobalView && projFilterEl && projFilterEl.value !== 'All';
+
+    if (isGlobalView && !isProjFiltered) {
         if (projectsList.length === 0) return alert("No existing projects found to add events to.");
         document.getElementById('add-project-group').style.display = 'flex';
+    } else {
+        document.getElementById('add-project-group').style.display = 'none';
     }
 
     const typeSelect = document.getElementById('add-type');
     typeSelect.value = 'Work Event';
     typeSelect.dispatchEvent(new Event('change')); 
 
-    document.getElementById('add-start-date').value = '';
-    document.getElementById('add-end-date').value = '';
+    if (typeof dateStr === 'string' && dateStr !== 'No Date') {
+        document.getElementById('add-start-date').value = dateStr;
+        document.getElementById('add-end-date').value = dateStr;
+    } else {
+        document.getElementById('add-start-date').value = '';
+        document.getElementById('add-end-date').value = '';
+    }
+
     document.getElementById('add-name').value = '';
     document.getElementById('add-invited').value = 0;
     document.getElementById('add-accepted').value = 0;
@@ -620,8 +634,12 @@ function saveNewEvent() {
 
     let pId = projectNumber;
     let pTitle = projectTitle;
+    
+    const projFilterEl = document.getElementById('project-filter');
+    let isProjFiltered = isGlobalView && projFilterEl && projFilterEl.value !== 'All';
+
     if (isGlobalView) {
-        pId = document.getElementById('add-project').value;
+        pId = isProjFiltered ? projFilterEl.value : document.getElementById('add-project').value;
         pTitle = projectsList.find(p => String(p.id) === String(pId))?.title || pId;
     }
 
@@ -968,8 +986,14 @@ function renderCalendar() {
     if (currentTypeFilter !== "All") {
         displayEvents = displayEvents.filter(e => (e.type || 'Work Event') === currentTypeFilter);
     }
+    
+    const projFilterEl = document.getElementById('project-filter');
+    let isProjFiltered = isGlobalView && projFilterEl && projFilterEl.value !== 'All';
+
     if (currentProjectFilter !== "All") {
         displayEvents = displayEvents.filter(e => e.projectId === currentProjectFilter);
+    } else if (isProjFiltered) {
+        displayEvents = displayEvents.filter(e => e.projectId === projFilterEl.value);
     }
 
     let validDates = displayEvents.map(e => new Date(e.date + 'T00:00:00')).filter(d => !isNaN(d.getTime()));
@@ -1123,11 +1147,16 @@ function renderCalendar() {
                     `;
                 }
 
+                // Add Inline + button logic identical to tasks
+                let hideInlineAdd = (isGlobalView && !isProjFiltered) || dateStr === 'No Date';
+                let addBtnHtml = hideInlineAdd ? '' : `<button class="add-task-inline-btn" onclick="openAddModal('${dateStr}')" data-tooltip="Add Event">+</button>`;
+
                 weekHtml += `
                     <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''} ${isDayEmpty ? 'empty-agenda-row' : ''}">
                         <div class="agenda-day-left">
                             <div class="agenda-date">${monthNum}/${dayNum}</div>
                             <div class="agenda-day-name">${dayName}</div>
+                            ${addBtnHtml}
                             ${agendaStatsHtml}
                         </div>
                         <div class="agenda-day-right">
@@ -1161,13 +1190,15 @@ function renderCalendar() {
                         else if (blockType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
                         else showStats = true;
                         
-                        let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
+                        // Setup conditional Global Badge display
+                        let showBadge = isGlobalView && !isProjFiltered;
+                        let globalBadge = showBadge ? `<span class="task-project-badge" data-tooltip="${ev.projectTitle}">${ev.projectTitle}</span>` : '';
                         let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
                         
                         let statsHtml = showStats ? `
                             <div class="event-stats inline-stats">
-                                <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                                <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                                <span class="stat-circle accepted-circle" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                                <span class="stat-circle invited-circle" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                             </div>
                         ` : '';
 
@@ -1180,7 +1211,7 @@ function renderCalendar() {
                                         ${titleIconHtml}
                                         ${statsHtml}
                                         <div class="event-name-target" data-full-title="${safeName}" onmouseenter="checkTruncation(this)">
-                                            <div class="event-name">${ev.name}${globalTag}</div>
+                                            <div class="event-name">${ev.name}${globalBadge}</div>
                                         </div>
                                     </div>
                                     ${notesHtml}
@@ -1347,13 +1378,14 @@ function renderCalendar() {
                     else if (evType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
                     else showStats = true;
                     
-                    let globalTag = isGlobalView ? `<div class="project-tag">${ev.projectTitle}</div>` : '';
+                    let showBadge = isGlobalView && !isProjFiltered;
+                    let globalTag = showBadge ? `<div class="project-tag" data-tooltip="${ev.projectTitle}">${ev.projectTitle}</div>` : '';
                     let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
                     
                     let statsHtml = showStats ? `
                         <div class="event-stats inline-stats">
-                            <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                            <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                            <span class="stat-circle accepted-circle" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                            <span class="stat-circle invited-circle" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                         </div>
                     ` : '';
 
