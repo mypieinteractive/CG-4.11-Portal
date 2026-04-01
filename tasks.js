@@ -1,6 +1,6 @@
 // File: tasks.js
-// Version: V1.5
-// Description: Rewrote the renderTasks loop to a flat array iteration. Categories and Subcategories now perfectly break the day rows and print interstitial headers across the full width of the screen.
+// Version: V1.7
+// Description: Added dynamic background color injection via the &bg= URL parameter to match the calendar script functionality.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -55,6 +55,14 @@ function init() {
 function extractProjectNumber() {
     const params = new URLSearchParams(window.location.search);
     projectNumber = params.get('project');
+    
+    // Dynamic Background Color Injection
+    let bgParam = params.get('bg');
+    if (bgParam) {
+        if (!bgParam.startsWith('#')) bgParam = '#' + bgParam;
+        document.documentElement.style.setProperty('--bg-color', bgParam);
+    }
+
     let extractedTitle = params.get('title');
     if (extractedTitle && window.location.hash) extractedTitle += window.location.hash;
     if (extractedTitle) try { extractedTitle = decodeURIComponent(extractedTitle); } catch(e) {}
@@ -376,8 +384,8 @@ function renderTasks() {
         if (!inLookAhead && isLookAheadTask) {
             htmlStr += `<div class="look-ahead-wrapper"><div class="look-ahead-title">3-Week Look Ahead</div>`;
             inLookAhead = true;
-            catChanged = true;
-            subChanged = true;
+            currentCat = null; currentSub = null; currentDateStr = null; 
+            dateChanged = true;
         }
 
         let hideHeaders = isGlobalView && !isProjFiltered;
