@@ -1,6 +1,6 @@
 // File: tasks.js
-// Version: V1.3
-// Description: Implemented pendingSaveTimeout for debounced batch API calls to Glide. Activated interactive checkboxes for Global View. Skipped category headers when isGlobalView is true. Updated + button rendering.
+// Version: V1.5
+// Description: Added initialization checks inside processAndMergeData(). On page load, if a project's JSON or Due Count columns are empty, the script forces an immediate state calculation and triggers the debounced save to populate Glide.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -143,8 +143,12 @@ function processAndMergeData() {
             let ptitle = proj['2UR8V'] ? `PT# ${proj['2UR8V']}` : proj['Name'] || 'Unnamed Project';
             let startStr = proj['GgPWW'];
             let jsonStr = proj['O2aWa'];
+            let dueCount = proj['sZTch'];
             
             projOpts += `<option value="${pid}">${ptitle}</option>`;
+
+            // Check if initialization is required for empty columns
+            let needsInit = (!jsonStr || jsonStr.trim() === '' || jsonStr.trim() === '[]' || dueCount === undefined || dueCount === null || String(dueCount).trim() === '');
 
             let jsonArr = [];
             try { jsonArr = JSON.parse(jsonStr) || []; } catch(e) {}
@@ -182,6 +186,11 @@ function processAndMergeData() {
                     isCustom: true
                 });
             });
+
+            // Trigger background save if project columns were empty on load
+            if (needsInit) {
+                triggerGlideSave(pid);
+            }
         });
         
         document.getElementById('project-filter').innerHTML = projOpts;
@@ -206,6 +215,11 @@ function processAndMergeData() {
         }
 
         let jsonStr = activeProj['O2aWa'];
+        let dueCount = activeProj['sZTch'];
+
+        // Check if initialization is required for empty columns
+        let needsInit = (!jsonStr || jsonStr.trim() === '' || jsonStr.trim() === '[]' || dueCount === undefined || dueCount === null || String(dueCount).trim() === '');
+
         let jsonArr = [];
         try { jsonArr = JSON.parse(jsonStr) || []; } catch(e) {}
 
@@ -239,6 +253,11 @@ function processAndMergeData() {
                 isCustom: true
             });
         });
+
+        // Trigger background save if columns were empty on load
+        if (needsInit) {
+            triggerGlideSave(activeProjectRowId);
+        }
     }
 
     populateAssigneeDropdown();
@@ -361,7 +380,6 @@ function renderTasks() {
         }
 
         if (dateChanged) {
-            let dayName = d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : '';
             let dayNum = d ? d.getDate() : '';
             let monthNum = d ? d.getMonth() + 1 : '';
             let isToday = dStr === formatDateObj(new Date());
@@ -373,7 +391,6 @@ function renderTasks() {
                 <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''}">
                     <div class="agenda-day-left">
                         <div class="agenda-date ${isPastDueBlock ? 'text-danger' : ''}">${dStr !== 'No Date' ? monthNum+'/'+dayNum : 'TBD'}</div>
-                        <div class="agenda-day-name ${isPastDueBlock ? 'text-danger' : ''}">${dayName}</div>
                         ${addBtnHtml}
                     </div>
                     <div class="agenda-day-right">
@@ -530,7 +547,7 @@ function triggerGlideSave(targetProjectId) {
     
     pendingSaveTimeout = setTimeout(() => {
         executeGlideSave();
-    }, 1500); // Wait 1.5 seconds after last input to batch the API request
+    }, 10000); // Wait 10 seconds after last input to batch the API request
 }
 
 function executeGlideSave() {
