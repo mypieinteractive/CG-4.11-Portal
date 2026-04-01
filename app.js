@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.28
-// Description: Matches tasks.js sorting capabilities (Start Date descending in dropdowns). Implements full Project Titles in Global dropdown. Dynamically hides global badge text and reveals the inline date-column '+' add button in the Agenda view when a specific project is selected during Global view.
+// Version: V2.30
+// Description: Unchanged from logic structure. Version bumped to ensure active sync.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -1129,7 +1129,6 @@ function renderCalendar() {
                 let dayEvents = displayEvents.filter(ev => ev.date === dateStr);
                 let isDayEmpty = dayEvents.length === 0;
 
-                let dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
                 let dayNum = d.getDate();
                 let monthNum = d.getMonth() + 1;
                 
@@ -1155,7 +1154,6 @@ function renderCalendar() {
                     <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''} ${isDayEmpty ? 'empty-agenda-row' : ''}">
                         <div class="agenda-day-left">
                             <div class="agenda-date">${monthNum}/${dayNum}</div>
-                            <div class="agenda-day-name">${dayName}</div>
                             ${addBtnHtml}
                             ${agendaStatsHtml}
                         </div>
