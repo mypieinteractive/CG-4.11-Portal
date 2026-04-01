@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.30
-// Description: Unchanged from logic structure. Version bumped to ensure active sync.
+// Version: V2.31
+// Description: Added dynamic background color injection via the &bg= URL parameter to natively support Glide's varying iframe environments.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -33,8 +33,8 @@ let currentTypeFilter = "All";
 let currentProjectFilter = "All";
 let pendingUploadFile = null;
 let dragCounter = 0;
-let currentViewState = 'notes'; // 'notes', 'minimized', 'events'
-let currentMainView = 'calendar'; // 'calendar', 'agenda'
+let currentViewState = 'notes'; 
+let currentMainView = 'calendar'; 
 let isMobileForce = false;
 
 // Sleek Theme SVG Icons
@@ -73,6 +73,13 @@ function extractProjectNumber() {
         document.body.classList.add('agenda-mode');
     }
 
+    // Dynamic Background Color Injection
+    let bgParam = params.get('bg');
+    if (bgParam) {
+        if (!bgParam.startsWith('#')) bgParam = '#' + bgParam;
+        document.documentElement.style.setProperty('--bg-color', bgParam);
+    }
+
     let extractedTitle = params.get('title');
 
     if (extractedTitle && window.location.hash) {
@@ -86,7 +93,6 @@ function extractProjectNumber() {
     projectTitle = extractedTitle || projectNumber;
 }
 
-// Fade overlay safely without destroying DOM elements
 function setHeaderLoading(isLoading) {
     const loader = document.getElementById('header-loader');
     const content = document.getElementById('header-content'); 
@@ -101,7 +107,6 @@ function setHeaderLoading(isLoading) {
     }
 }
 
-// Database Communication (Glide v2 API)
 async function fetchDatabaseData() {
     setHeaderLoading(true);
     
