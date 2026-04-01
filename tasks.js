@@ -1,6 +1,8 @@
 // File: tasks.js
-// Version: V1.7
-// Description: Added dynamic background color injection via the &bg= URL parameter to match the calendar script functionality.
+// Version: V1.8
+// Description: Introduced ENABLE_PAST_DUE_BLOCK logic. Replaced inline notes with a dedicated editing modal. Integrated generateTaskRowHtml helper function for custom SVG checkboxes and secondary note formatting.
+
+const ENABLE_PAST_DUE_BLOCK = true; // Toggle to 'false' to revert to pure chronological sorting
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -13,6 +15,7 @@ const projectDateRange = document.getElementById('project-date-range');
 const tasksStatus = document.getElementById('tasks-status');
 const modalOverlay = document.getElementById('modal-overlay');
 const addModal = document.getElementById('add-modal');
+const noteModal = document.getElementById('note-modal');
 const viewToggleBtn = document.getElementById('view-toggle-btn');
 const assigneeFilter = document.getElementById('assignee-filter');
 const projFilterEl = document.getElementById('project-filter');
@@ -21,7 +24,7 @@ const projFilterEl = document.getElementById('project-filter');
 let projectNumber = null;
 let projectTitle = null;
 let isGlobalView = false;
-let hideCompleted = true; // Set to hide on load
+let hideCompleted = true; 
 let currentAssigneeFilter = "All";
 
 let masterTasks = [];
@@ -304,6 +307,43 @@ function populateAssigneeDropdown() {
     }
 }
 
+function generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime, forcePastDueStyling = false) {
+    let taskPastDue = forcePastDueStyling || (!task.completed && task.dueDate && task.dueDate.getTime() < todayTime);
+    let rowClasses = 'task-row';
+    if (task.completed) rowClasses += ' completed';
+    if (taskPastDue) rowClasses += ' past-due';
+    if (!task.completed) rowClasses += ' incomplete-target';
+
+    let globalBadge = hideHeaders ? `<span class="task-project-badge" data-tooltip="${task.projectTitle}">${task.shortTitle}</span>` : '';
+    
+    let pencilIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
+
+    let notesHtml = task.notes && task.notes.trim() !== '' 
+        ? `<div class="task-display-notes">${task.notes.replace(/\n/g, '<br>')}</div>` 
+        : '';
+
+    let dateFlagHtml = '';
+    if (forcePastDueStyling && task.dueDate) {
+        let m = task.dueDate.getMonth() + 1;
+        let d = task.dueDate.getDate();
+        dateFlagHtml = `<span class="task-past-due-date">Due ${m}/${d}</span>`;
+    }
+
+    return `
+        <div class="${rowClasses}" id="row-${task.id}">
+            <div class="task-main-line">
+                <div class="custom-checkbox ${task.completed ? 'checked' : ''}" onclick="toggleTaskComplete('${task.id}', ${!task.completed})">
+                    <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+                <div class="task-assignee-large">${task.assignee}</div>
+                <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge} ${dateFlagHtml}</div>
+                <button class="note-edit-btn" onclick="openNoteModal('${task.id}')" data-tooltip="Edit Notes">${pencilIcon}</button>
+            </div>
+            ${notesHtml}
+        </div>
+    `;
+}
+
 function renderTasks() {
     tasksContainer.innerHTML = '';
     
@@ -325,8 +365,46 @@ function renderTasks() {
         return;
     }
 
-    // Flat Sort: Date -> Category -> SubCategory -> Name
-    displayTasks.sort((a, b) => {
+    let todayTime = new Date().setHours(0,0,0,0);
+    let htmlStr = '';
+
+    // Extractor Logic for Dedicated Past Due Block
+    let pastDueTasks = [];
+    let standardTasks = [];
+
+    if (ENABLE_PAST_DUE_BLOCK) {
+        displayTasks.forEach(t => {
+            if (!t.completed && t.dueDate && t.dueDate.getTime() < todayTime) {
+                pastDueTasks.push(t);
+            } else {
+                standardTasks.push(t);
+            }
+        });
+    } else {
+        standardTasks = displayTasks;
+    }
+
+    let hideHeaders = isGlobalView && !isProjFiltered;
+
+    // Render Past Due Block First
+    if (pastDueTasks.length > 0) {
+        pastDueTasks.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+
+        htmlStr += `
+            <div class="past-due-block-wrapper">
+                <div class="past-due-block-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    Past Due Action Items
+                </div>
+        `;
+        pastDueTasks.forEach(task => {
+            htmlStr += generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime, true);
+        });
+        htmlStr += `</div>`;
+    }
+
+    // Standard Flat Sort: Date -> Category -> SubCategory -> Name
+    standardTasks.sort((a, b) => {
         let dateA = a.dueDate ? a.dueDate.getTime() : 9999999999999;
         let dateB = b.dueDate ? b.dueDate.getTime() : 9999999999999;
         if (dateA !== dateB) return dateA - dateB;
@@ -342,75 +420,58 @@ function renderTasks() {
         return a.name.localeCompare(b.name);
     });
 
-    let todayTime = new Date().setHours(0,0,0,0);
     let lookAheadLimit = todayTime + (21 * 86400000); 
-
-    let htmlStr = '';
     let inLookAhead = false;
     let currentCat = null;
     let currentSub = null;
     let currentDateStr = null;
     let dayRowOpen = false;
 
-    displayTasks.forEach((task) => {
+    let dateGroups = {};
+    standardTasks.forEach(task => {
         let dStr = task.dueDate ? formatDateObj(task.dueDate) : 'No Date';
-        let cat = task.category || 'Uncategorized';
-        let sub = task.subCategory || '';
+        if (!dateGroups[dStr]) dateGroups[dStr] = [];
+        dateGroups[dStr].push(task);
+    });
 
-        let d = task.dueDate ? new Date(task.dueDate.getTime()) : null;
-        let taskTime = d ? d.getTime() : null;
-        let isLookAheadTask = taskTime !== null && taskTime >= todayTime && taskTime <= lookAheadLimit;
+    Object.keys(dateGroups).forEach(dStr => {
+        let dayTasks = dateGroups[dStr];
+        let d = dStr !== 'No Date' ? new Date(dStr + 'T00:00:00') : null;
+        
+        let isLookAheadBlock = false;
+        if (d) {
+            let taskTime = d.getTime();
+            if (taskTime <= lookAheadLimit && taskTime >= todayTime) {
+                isLookAheadBlock = true;
+            }
+        }
 
-        let catChanged = cat !== currentCat;
-        let subChanged = catChanged || sub !== currentSub;
-        let dateChanged = dStr !== currentDateStr;
-
-        // Exit look ahead
-        if (inLookAhead && !isLookAheadTask) {
+        if (inLookAhead && !isLookAheadBlock && d && d.getTime() > lookAheadLimit) {
             if (dayRowOpen) { htmlStr += `</div></div>`; dayRowOpen = false; }
             htmlStr += `</div>`; 
             inLookAhead = false;
-            catChanged = true;
-            subChanged = true;
+            currentCat = null; currentSub = null; // Reset to force reprint
         }
 
-        // Close row to print headers
-        if (dayRowOpen && (catChanged || subChanged || dateChanged)) {
-            htmlStr += `</div></div>`;
-            dayRowOpen = false;
+        let dateChanged = dStr !== currentDateStr;
+        if (dateChanged) {
+            if (dayRowOpen) {
+                htmlStr += `</div></div>`;
+                dayRowOpen = false;
+            }
         }
 
-        // Enter look ahead
-        if (!inLookAhead && isLookAheadTask) {
+        if (!inLookAhead && isLookAheadBlock) {
             htmlStr += `<div class="look-ahead-wrapper"><div class="look-ahead-title">3-Week Look Ahead</div>`;
             inLookAhead = true;
             currentCat = null; currentSub = null; currentDateStr = null; 
             dateChanged = true;
         }
 
-        let hideHeaders = isGlobalView && !isProjFiltered;
-
-        // Print Headers Between Days
-        if (catChanged) {
-            if (!hideHeaders) {
-                htmlStr += `<div class="task-category-header">${cat}</div>`;
-            }
-            currentCat = cat;
-        }
-
-        if (subChanged) {
-            if (!hideHeaders && sub !== 'General' && sub !== '') {
-                htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
-            }
-            currentSub = sub;
-        }
-
-        // Open Day Row
-        if (!dayRowOpen) {
+        if (dateChanged) {
             let dayNum = d ? d.getDate() : '';
             let monthNum = d ? d.getMonth() + 1 : '';
             let isToday = dStr === formatDateObj(new Date());
-            let isPastDueBlock = d && d.getTime() < todayTime; 
 
             let hideInlineAdd = hideHeaders || dStr === 'No Date';
             let addBtnHtml = hideInlineAdd ? '' : `<button class="add-task-inline-btn" onclick="openAddModal('${dStr}', '${targetContextProjId}')" data-tooltip="Add Custom Task">+</button>`;
@@ -418,38 +479,42 @@ function renderTasks() {
             htmlStr += `
                 <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''}">
                     <div class="agenda-day-left">
-                        <div class="agenda-date ${isPastDueBlock ? 'text-danger' : ''}">${dStr !== 'No Date' ? monthNum+'/'+dayNum : 'TBD'}</div>
+                        <div class="agenda-date">${dStr !== 'No Date' ? monthNum+'/'+dayNum : 'TBD'}</div>
                         ${addBtnHtml}
                     </div>
                     <div class="agenda-day-right">
             `;
             currentDateStr = dStr;
             dayRowOpen = true;
+            currentCat = null; currentSub = null; 
         }
 
-        // Print Task
-        let taskPastDue = !task.completed && d && d.getTime() < todayTime;
-        let rowClasses = 'task-row';
-        if (task.completed) rowClasses += ' completed';
-        if (taskPastDue) rowClasses += ' past-due';
-        if (!task.completed) rowClasses += ' incomplete-target';
+        let catGroups = {};
+        dayTasks.forEach(t => {
+            let cat = t.category || 'Uncategorized';
+            if (!catGroups[cat]) catGroups[cat] = {};
+            let sub = t.subCategory || 'General';
+            if (!catGroups[cat][sub]) catGroups[cat][sub] = [];
+            catGroups[cat][sub].push(t);
+        });
 
-        let globalBadge = hideHeaders ? `<span class="task-project-badge" data-tooltip="${task.projectTitle}">${task.shortTitle}</span>` : '';
-        let noteBtnText = task.notes && task.notes.trim() !== '' ? 'Edit Note' : '+ Note';
-        
-        htmlStr += `
-            <div class="${rowClasses}" id="row-${task.id}">
-                <div class="task-main-line">
-                    <input type="checkbox" class="task-checkbox-lg" ${task.completed ? 'checked' : ''} onchange="toggleTaskComplete('${task.id}', this.checked)">
-                    <div class="task-assignee-large">${task.assignee}</div>
-                    <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge}</div>
-                    <button class="note-toggle-btn" onclick="toggleNoteField('${task.id}')">[${noteBtnText}]</button>
-                </div>
-                <div class="task-note-container" id="note-container-${task.id}" style="display: none;">
-                    <textarea class="task-notes-input-dark" placeholder="Add custom notes..." ${isGlobalView ? 'readonly' : ''} onblur="updateTaskNotes('${task.id}', this.value)">${task.notes}</textarea>
-                </div>
-            </div>
-        `;
+        Object.keys(catGroups).forEach(cat => {
+            if (!hideHeaders && cat !== currentCat) {
+                htmlStr += `<div class="task-category-header">${cat}</div>`;
+                currentCat = cat;
+            }
+            
+            Object.keys(catGroups[cat]).forEach(sub => {
+                if (!hideHeaders && sub !== 'General' && sub !== '' && sub !== currentSub) {
+                    htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
+                    currentSub = sub;
+                }
+
+                catGroups[cat][sub].forEach(task => {
+                    htmlStr += generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime, false);
+                });
+            });
+        });
     });
 
     if (dayRowOpen) htmlStr += `</div></div>`;
@@ -471,17 +536,28 @@ function scrollToFirstIncomplete() {
     }, 100);
 }
 
-window.toggleNoteField = function(taskId) {
-    const container = document.getElementById(`note-container-${taskId}`);
-    if (container) {
-        if (container.style.display === 'none') {
-            container.style.display = 'block';
-            let ta = container.querySelector('textarea');
-            if (ta) ta.focus();
-        } else {
-            container.style.display = 'none';
+// Modal Note Engine
+window.openNoteModal = function(taskId) {
+    let t = mergedTasks.find(x => x.id === taskId);
+    if (!t) return;
+    document.getElementById('note-task-id').value = taskId;
+    document.getElementById('note-modal-text').value = t.notes || "";
+    modalOverlay.classList.remove('hidden');
+    noteModal.classList.remove('hidden');
+}
+
+window.saveNoteModal = function() {
+    let taskId = document.getElementById('note-task-id').value;
+    let newNotes = document.getElementById('note-modal-text').value;
+    let t = mergedTasks.find(x => x.id === taskId);
+    if (t) {
+        if (t.notes !== newNotes) {
+            t.notes = newNotes;
+            triggerGlideSave(t.projectId);
+            renderTasks(); 
         }
     }
+    closeModals();
 }
 
 function updateHeaderStats() {
@@ -529,22 +605,6 @@ window.toggleTaskComplete = function(taskId, isChecked) {
         t.completed = isChecked;
         renderTasks(); 
         triggerGlideSave(t.projectId);
-    }
-};
-
-window.updateTaskNotes = function(taskId, val) {
-    let t = mergedTasks.find(x => x.id === taskId);
-    if (t) {
-        if (t.notes !== val) {
-            t.notes = val;
-            triggerGlideSave(t.projectId); 
-            
-            let row = document.getElementById(`row-${taskId}`);
-            if (row) {
-                let btn = row.querySelector('.note-toggle-btn');
-                if (btn) btn.innerText = val.trim() !== '' ? '[Edit Note]' : '[+ Note]';
-            }
-        }
     }
 };
 
@@ -658,6 +718,7 @@ window.openAddModal = function(dateStr, targetContextProjId) {
     document.getElementById('add-assignee').value = '';
     document.getElementById('add-target-date').value = dateStr;
     
+    // Store target ID invisibly in the modal for save usage
     document.getElementById('add-modal').setAttribute('data-target-proj', activeTargetId);
 
     modalOverlay.classList.remove('hidden');
@@ -667,6 +728,7 @@ window.openAddModal = function(dateStr, targetContextProjId) {
 window.closeModals = function() {
     modalOverlay.classList.add('hidden');
     addModal.classList.add('hidden');
+    if (noteModal) noteModal.classList.add('hidden');
 }
 
 window.saveCustomTask = function() {
