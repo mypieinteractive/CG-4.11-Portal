@@ -44,7 +44,7 @@
 
                                     <select id="assignee-filter" class="header-action-btn" data-tooltip="Filter by Assignee">
                                         <option value="All">All Assignees</option>
-                                        </select>
+                                    </select>
 
                                     <button id="view-toggle-btn" class="header-action-btn">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -87,6 +87,22 @@
             </div>
             <div class="modal-footer">
                 <button class="save-btn" onclick="saveCustomTask()">Save Task</button>
+            </div>
+        </div>
+
+        <div id="note-modal" class="modal hidden">
+            <div class="modal-header">
+                <h2>Task Notes</h2>
+                <button class="close-btn" onclick="closeModals()">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="note-task-id">
+                <div class="form-group">
+                    <textarea id="note-modal-text" rows="6" placeholder="Add custom notes here..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" onclick="saveNoteModal()">Save Notes</button>
             </div>
         </div>
     </div>
