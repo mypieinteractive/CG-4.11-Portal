@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.43 */
-/* Changes: Reverted mobile width constraint logic for pure agenda mode to force exactly 50% grid squares as requested. */
+/* Version: V1.44 */
+/* Description: Fixed margin logic for task-subcategory-header. */
 :root {
     --bg-color: transparent;
     --surface-color: #1E1E2F;
@@ -131,6 +131,8 @@ body { background-color: var(--bg-color); color: var(--text-primary); padding: 0
     align-items: center;
 }
 
+.mobile-wrap-group, .mobile-btn-row { display: flex; gap: 10px; }
+
 /* Subtle styling for Dropdowns and Text Actions */
 .header-action-btn {
     background-color: rgba(255, 255, 255, 0.03);
@@ -224,6 +226,9 @@ select.header-action-btn option { background-color: var(--surface-color); color:
 /* Stats Toggle Logic */
 .calendar-grid.hide-stats .header-totals,
 .calendar-grid.hide-stats .event-stats { display: none !important; }
+
+/* Agenda Mode Overrides */
+body.agenda-mode #collapse-btn { display: none !important; }
 
 /* 3-Way Cycle Overrides */
 /* 1. view-minimized (Ultra-collapsed) */
@@ -601,7 +606,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     color: var(--text-secondary);
     margin-top: 8px;
     margin-bottom: 6px;
-    margin-left: 65px; /* Aligns with tasks block */
+    margin-left: 15px; /* Removed indent to span full width */
     text-transform: uppercase;
 }
 
