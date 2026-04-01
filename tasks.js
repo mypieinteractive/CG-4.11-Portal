@@ -1,6 +1,6 @@
 // File: tasks.js
-// Version: V1.2
-// Description: Rewrote grouping array logic to Date -> Category -> Subcategory. Added dynamic assignee dropdown population. Connected inline Add Task buttons to absolute date strings.
+// Version: V1.3
+// Description: Implemented pendingSaveTimeout for debounced batch API calls to Glide. Activated interactive checkboxes for Global View. Skipped category headers when isGlobalView is true. Updated + button rendering.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -29,6 +29,10 @@ let mergedTasks = [];
 let activeProjectRowId = null;
 let projectStartDate = null;
 let initialRenderDone = false;
+
+// Debounce Save State
+let pendingSaveTimeout = null;
+let dirtyProjects = new Set();
 
 function init() {
     extractProjectNumber();
@@ -210,6 +214,7 @@ function processAndMergeData() {
             let dueDate = calculateDueDate(projectStartDate, mt.wks);
             mergedTasks.push({
                 ...mt,
+                projectId: activeProjectRowId,
                 dueDate: dueDate,
                 completed: savedState ? !!savedState.completed : false,
                 notes: savedState ? savedState.notes : "",
@@ -222,6 +227,7 @@ function processAndMergeData() {
             let dueDate = ct.targetDateStr ? new Date(ct.targetDateStr + 'T00:00:00') : calculateDueDate(projectStartDate, ct.wks || 0);
             mergedTasks.push({
                 id: ct.id,
+                projectId: activeProjectRowId,
                 category: 'Custom Tasks',
                 subCategory: '',
                 name: ct.name,
@@ -300,6 +306,13 @@ function renderTasks() {
     let todayTime = new Date().setHours(0,0,0,0);
     let lookAheadLimit = todayTime + (21 * 86400000); // Today + 21 days
 
+    let dateGroups = {};
+    displayTasks.forEach(task => {
+        let dStr = task.dueDate ? formatDateObj(task.dueDate) : 'No Date';
+        if (!dateGroups[dStr]) dateGroups[dStr] = [];
+        dateGroups[dStr].push(task);
+    });
+
     let htmlStr = '';
     let inLookAhead = false;
     let currentCat = null;
@@ -307,26 +320,32 @@ function renderTasks() {
     let currentDateStr = null;
     let dayRowOpen = false;
 
-    displayTasks.forEach((task, index) => {
-        let dStr = task.dueDate ? formatDateObj(task.dueDate) : 'No Date';
-        let cat = task.category || 'Uncategorized';
-        let sub = task.subCategory || '';
+    Object.keys(dateGroups).forEach(dStr => {
+        let dayTasks = dateGroups[dStr];
+        let d = dStr !== 'No Date' ? new Date(dStr + 'T00:00:00') : null;
+        
+        let isPastDue = false;
+        let isLookAheadBlock = false;
 
-        let taskTime = task.dueDate ? task.dueDate.getTime() : null;
-        let isLookAheadTask = taskTime !== null && taskTime >= todayTime && taskTime <= lookAheadLimit;
+        if (d) {
+            let taskTime = d.getTime();
+            if (taskTime <= lookAheadLimit && taskTime >= todayTime) {
+                isLookAheadBlock = true;
+            }
+            if (taskTime < todayTime && dayTasks.some(t => !t.completed)) {
+                isPastDue = true;
+            }
+        }
 
-        // Check if we leave the look-ahead window
-        if (inLookAhead && !isLookAheadTask) {
+        // Close look-ahead wrapper if we exit the zone
+        if (inLookAhead && !isLookAheadBlock && d && d.getTime() > lookAheadLimit) {
             if (dayRowOpen) { htmlStr += `</div></div>`; dayRowOpen = false; }
             htmlStr += `</div>`; // Close wrapper
             inLookAhead = false;
         }
 
         let dateChanged = dStr !== currentDateStr;
-        let catChanged = cat !== currentCat;
-        let subChanged = catChanged || sub !== currentSub;
-
-        if (dateChanged || catChanged || subChanged) {
+        if (dateChanged) {
             if (dayRowOpen) {
                 htmlStr += `</div></div>`;
                 dayRowOpen = false;
@@ -334,24 +353,14 @@ function renderTasks() {
         }
 
         // Open Look-Ahead wrapper
-        if (!inLookAhead && isLookAheadTask) {
+        if (!inLookAhead && isLookAheadBlock) {
             htmlStr += `<div class="look-ahead-wrapper"><div class="look-ahead-title">3-Week Look Ahead</div>`;
             inLookAhead = true;
-            currentCat = null; currentSub = null; currentDateStr = null; // Force headers to reprint inside wrapper
-            catChanged = true; subChanged = true; dateChanged = true;
+            currentCat = null; currentSub = null; currentDateStr = null; 
+            dateChanged = true;
         }
 
-        if (catChanged) {
-            htmlStr += `<div class="task-category-header">${cat}</div>`;
-            currentCat = cat;
-        }
-        if (subChanged && sub !== 'General' && sub !== '') {
-            htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
-            currentSub = sub;
-        }
-
-        if (dateChanged || catChanged || subChanged) {
-            let d = task.dueDate;
+        if (dateChanged) {
             let dayName = d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : '';
             let dayNum = d ? d.getDate() : '';
             let monthNum = d ? d.getMonth() + 1 : '';
@@ -371,32 +380,57 @@ function renderTasks() {
             `;
             currentDateStr = dStr;
             dayRowOpen = true;
+            currentCat = null; currentSub = null; // Reset nested headers for the new day block
         }
 
-        // Render Task Row
-        let taskPastDue = !task.completed && task.dueDate && task.dueDate.getTime() < todayTime;
-        let rowClasses = 'task-row';
-        if (task.completed) rowClasses += ' completed';
-        if (taskPastDue) rowClasses += ' past-due';
-        if (!task.completed) rowClasses += ' incomplete-target';
+        // Group by Category within the Day
+        let catGroups = {};
+        dayTasks.forEach(t => {
+            let cat = t.category || 'Uncategorized';
+            if (!catGroups[cat]) catGroups[cat] = {};
+            let sub = t.subCategory || 'General';
+            if (!catGroups[cat][sub]) catGroups[cat][sub] = [];
+            catGroups[cat][sub].push(t);
+        });
 
-        let disabledAttr = isGlobalView ? 'disabled' : '';
-        let globalBadge = isGlobalView ? `<span class="task-project-badge">${task.projectTitle}</span>` : '';
-        let noteBtnText = task.notes && task.notes.trim() !== '' ? 'Edit Note' : '+ Note';
+        Object.keys(catGroups).forEach(cat => {
+            if (!isGlobalView && cat !== currentCat) {
+                htmlStr += `<div class="task-category-header">${cat}</div>`;
+                currentCat = cat;
+            }
+            
+            Object.keys(catGroups[cat]).forEach(sub => {
+                if (!isGlobalView && sub !== 'General' && sub !== '' && sub !== currentSub) {
+                    htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
+                    currentSub = sub;
+                }
 
-        htmlStr += `
-            <div class="${rowClasses}" id="row-${task.id}">
-                <div class="task-main-line">
-                    <input type="checkbox" class="task-checkbox-lg" ${task.completed ? 'checked' : ''} ${disabledAttr} onchange="toggleTaskComplete('${task.id}', this.checked)">
-                    <div class="task-assignee-large">${task.assignee}</div>
-                    <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge}</div>
-                    <button class="note-toggle-btn" onclick="toggleNoteField('${task.id}')">[${noteBtnText}]</button>
-                </div>
-                <div class="task-note-container" id="note-container-${task.id}" style="display: none;">
-                    <textarea class="task-notes-input-dark" placeholder="Add custom notes..." ${isGlobalView ? 'readonly' : ''} onblur="updateTaskNotes('${task.id}', this.value)">${task.notes}</textarea>
-                </div>
-            </div>
-        `;
+                catGroups[cat][sub].forEach(task => {
+                    let taskPastDue = !task.completed && d && d.getTime() < todayTime;
+                    let rowClasses = 'task-row';
+                    if (task.completed) rowClasses += ' completed';
+                    if (taskPastDue) rowClasses += ' past-due';
+                    if (!task.completed) rowClasses += ' incomplete-target';
+
+                    let globalBadge = isGlobalView ? `<div class="task-project-badge" data-tooltip="${task.projectTitle}">${task.projectTitle}</div>` : '';
+                    let noteBtnText = task.notes && task.notes.trim() !== '' ? 'Edit Note' : '+ Note';
+
+                    htmlStr += `
+                        <div class="${rowClasses}" id="row-${task.id}">
+                            <div class="task-main-line">
+                                <input type="checkbox" class="task-checkbox-lg" ${task.completed ? 'checked' : ''} onchange="toggleTaskComplete('${task.id}', this.checked)">
+                                <div class="task-assignee-large">${task.assignee}</div>
+                                <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge}</div>
+                                <button class="note-toggle-btn" onclick="toggleNoteField('${task.id}')">[${noteBtnText}]</button>
+                            </div>
+                            <div class="task-note-container" id="note-container-${task.id}" style="display: none;">
+                                <textarea class="task-notes-input-dark" placeholder="Add custom notes..." onblur="updateTaskNotes('${task.id}', this.value)">${task.notes}</textarea>
+                            </div>
+                        </div>
+                    `;
+                });
+            });
+        });
     });
 
     if (dayRowOpen) htmlStr += `</div></div>`;
@@ -462,22 +496,20 @@ function updateHeaderStats() {
 }
 
 window.toggleTaskComplete = function(taskId, isChecked) {
-    if (isGlobalView) return;
     let t = mergedTasks.find(x => x.id === taskId);
     if (t) {
         t.completed = isChecked;
         renderTasks(); 
-        triggerGlideSave();
+        triggerGlideSave(t.projectId);
     }
 };
 
 window.updateTaskNotes = function(taskId, val) {
-    if (isGlobalView) return;
     let t = mergedTasks.find(x => x.id === taskId);
     if (t) {
         if (t.notes !== val) {
             t.notes = val;
-            triggerGlideSave(); 
+            triggerGlideSave(t.projectId); 
             
             let row = document.getElementById(`row-${taskId}`);
             if (row) {
@@ -488,29 +520,50 @@ window.updateTaskNotes = function(taskId, val) {
     }
 };
 
-function triggerGlideSave() {
-    if (isGlobalView || !activeProjectRowId) return;
+// Debounced Multi-Project Background Saving
+function triggerGlideSave(targetProjectId) {
+    if (!targetProjectId) return;
+    
+    dirtyProjects.add(targetProjectId);
 
-    let payloadToSave = mergedTasks.map(t => {
-        if (t.isCustom) {
-            return { id: t.id, isCustom: true, name: t.name, assignee: t.assignee, targetDateStr: t.targetDateStr, completed: t.completed, notes: t.notes };
-        } else {
-            return { id: t.id, completed: t.completed, notes: t.notes };
-        }
+    if (pendingSaveTimeout) clearTimeout(pendingSaveTimeout);
+    
+    pendingSaveTimeout = setTimeout(() => {
+        executeGlideSave();
+    }, 1500); // Wait 1.5 seconds after last input to batch the API request
+}
+
+function executeGlideSave() {
+    if (dirtyProjects.size === 0) return;
+
+    let mutations = [];
+    let todayTime = new Date().setHours(0,0,0,0);
+
+    dirtyProjects.forEach(pid => {
+        let projectTasks = mergedTasks.filter(t => t.projectId === pid);
+        
+        let payloadToSave = projectTasks.map(t => {
+            if (t.isCustom) {
+                return { id: t.id, isCustom: true, name: t.name, assignee: t.assignee, targetDateStr: t.targetDateStr, completed: t.completed, notes: t.notes };
+            } else {
+                return { id: t.id, completed: t.completed, notes: t.notes };
+            }
+        });
+
+        let actionRequiredCount = projectTasks.filter(t => !t.completed && t.dueDate && t.dueDate.getTime() < todayTime).length;
+
+        mutations.push({
+            tableName: GLIDE_TABLE_ID_PROJECTS,
+            rowID: pid, 
+            kind: "set-columns-in-row",
+            columnValues: {
+                "O2aWa": JSON.stringify(payloadToSave),
+                "sZTch": String(actionRequiredCount)
+            }
+        });
     });
 
-    let todayTime = new Date().setHours(0,0,0,0);
-    let actionRequiredCount = mergedTasks.filter(t => !t.completed && t.dueDate && t.dueDate.getTime() < todayTime).length;
-
-    const mutation = {
-        tableName: GLIDE_TABLE_ID_PROJECTS,
-        rowID: activeProjectRowId,
-        kind: "set-columns-in-row",
-        columnValues: {
-            "O2aWa": JSON.stringify(payloadToSave),
-            "sZTch": String(actionRequiredCount)
-        }
-    };
+    dirtyProjects.clear(); // Reset queue
 
     fetch('https://api.glideapp.io/api/function/mutateTables', {
         method: 'POST',
@@ -520,7 +573,7 @@ function triggerGlideSave() {
         },
         body: JSON.stringify({ 
             appID: GLIDE_APP_ID,
-            mutations: [mutation]
+            mutations: mutations
         })
     }).catch(err => console.error("Background Save Failed", err));
 }
@@ -554,6 +607,14 @@ function generateId() { return 'task_' + Math.random().toString(36).substr(2, 9)
 
 window.openAddModal = function(dateStr) {
     if (!projectNumber || isGlobalView) return;
+    
+    let displayDate = "TBD";
+    if (dateStr && dateStr !== 'No Date') {
+        let d = new Date(dateStr + 'T00:00:00');
+        displayDate = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
+    }
+    document.getElementById('add-modal-title').innerText = `Add Task: ${displayDate}`;
+    
     document.getElementById('add-name').value = '';
     document.getElementById('add-assignee').value = '';
     document.getElementById('add-target-date').value = dateStr;
@@ -577,6 +638,7 @@ window.saveCustomTask = function() {
 
     mergedTasks.push({
         id: generateId(),
+        projectId: activeProjectRowId,
         category: 'Custom Tasks',
         subCategory: '',
         name: name,
@@ -590,7 +652,7 @@ window.saveCustomTask = function() {
 
     closeModals();
     renderTasks(); 
-    triggerGlideSave();
+    triggerGlideSave(activeProjectRowId);
 }
 
 init();
