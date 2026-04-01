@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.44 */
-/* Description: Fixed margin logic for task-subcategory-header. */
+/* Version: V1.45 */
+/* Description: Added fallback rule to suppress task headers in native Calendar Agenda mode. Removed dayName. */
 :root {
     --bg-color: transparent;
     --surface-color: #1E1E2F;
@@ -407,7 +407,6 @@ body.agenda-mode #collapse-btn { display: none !important; }
 
 .agenda-day-left { width: 50px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
 .agenda-date { font-size: 1rem; font-weight: bold; color: var(--text-primary); text-align: center; }
-.agenda-day-name { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; display: none; } /* Removed per request */
 
 .agenda-daily-stats { display: flex; gap: 4px; margin-top: 8px; justify-content: center; flex-wrap: wrap; }
 .calendar-grid.hide-stats .agenda-daily-stats { display: none !important; }
@@ -567,6 +566,10 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 
 /* ===== TASK TRACKER SPECIFIC STYLES ===== */
 
+/* Fallback hiding of task headers if calendar is generating them in agenda mode */
+.calendar-grid .task-category-header, 
+.calendar-grid .task-subcategory-header { display: none !important; }
+
 .tasks-container {
     display: flex;
     flex-direction: column;
@@ -606,7 +609,6 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     color: var(--text-secondary);
     margin-top: 8px;
     margin-bottom: 6px;
-    margin-left: 15px; /* Removed indent to span full width */
     text-transform: uppercase;
 }
 
