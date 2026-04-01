@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.31
-// Description: Added dynamic background color injection via the &bg= URL parameter to natively support Glide's varying iframe environments.
+// Version: V2.32
+// Description: Version bumped to remain in strict synchronization. No underlying logic overrides.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -93,6 +93,7 @@ function extractProjectNumber() {
     projectTitle = extractedTitle || projectNumber;
 }
 
+// Fade overlay safely without destroying DOM elements
 function setHeaderLoading(isLoading) {
     const loader = document.getElementById('header-loader');
     const content = document.getElementById('header-content'); 
@@ -107,6 +108,7 @@ function setHeaderLoading(isLoading) {
     }
 }
 
+// Database Communication (Glide v2 API)
 async function fetchDatabaseData() {
     setHeaderLoading(true);
     
