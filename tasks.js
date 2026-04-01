@@ -1,6 +1,6 @@
 // File: tasks.js
-// Version: V1.5
-// Description: Added initialization checks inside processAndMergeData(). On page load, if a project's JSON or Due Count columns are empty, the script forces an immediate state calculation and triggers the debounced save to populate Glide.
+// Version: V1.6
+// Description: Sorts projects array by Start Date. Injects full project titles into tooltips. Hides global badges and restores inline add buttons if a specific project is selected while in Global View. Sets hideCompleted default to true.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -15,12 +15,13 @@ const modalOverlay = document.getElementById('modal-overlay');
 const addModal = document.getElementById('add-modal');
 const viewToggleBtn = document.getElementById('view-toggle-btn');
 const assigneeFilter = document.getElementById('assignee-filter');
+const projFilterEl = document.getElementById('project-filter');
 
 // State
 let projectNumber = null;
 let projectTitle = null;
 let isGlobalView = false;
-let hideCompleted = false; // Default false to allow scroll-up history
+let hideCompleted = true; // Set to hide on load
 let currentAssigneeFilter = "All";
 
 let masterTasks = [];
@@ -42,7 +43,7 @@ function init() {
         if (String(projectNumber).toLowerCase().trim() === 'global') {
             isGlobalView = true;
             document.getElementById('main-title-group').style.display = 'none';
-            document.getElementById('project-filter').style.display = 'flex';
+            projFilterEl.style.display = 'flex';
         }
         fetchDatabaseData();
     } else {
@@ -97,6 +98,13 @@ async function fetchDatabaseData() {
         projectsData = result[0]?.rows || [];
         const rawTasks = result[1]?.rows || [];
 
+        // Sort Projects by Start Date (Descending / Newest First)
+        projectsData.sort((a, b) => {
+            let dateA = a['GgPWW'] ? new Date(a['GgPWW']).getTime() : 0;
+            let dateB = b['GgPWW'] ? new Date(b['GgPWW']).getTime() : 0;
+            return dateB - dateA; 
+        });
+
         masterTasks = rawTasks.map(r => ({
             id: r['$rowID'],
             category: r['vmA2P'] || 'Uncategorized',
@@ -140,14 +148,25 @@ function processAndMergeData() {
         
         projectsData.forEach(proj => {
             let pid = proj['$rowID'];
-            let ptitle = proj['2UR8V'] ? `PT# ${proj['2UR8V']}` : proj['Name'] || 'Unnamed Project';
+            
+            // Build Full Title
+            let pt = proj['2UR8V'] || '';
+            let address = proj['Name'] || '';
+            let citySt = proj['8V1wO'] || '';
+            let ptitle = `PT# ${pt}`;
+            if (address) ptitle += ` - ${address}`;
+            if (citySt) ptitle += `, ${citySt}`;
+            if (!pt && !address && !citySt) ptitle = 'Unnamed Project';
+            
+            // Build Short Title for Badge
+            let shortTitle = pt ? `PT# ${pt}` : 'Project';
+
             let startStr = proj['GgPWW'];
             let jsonStr = proj['O2aWa'];
             let dueCount = proj['sZTch'];
             
             projOpts += `<option value="${pid}">${ptitle}</option>`;
 
-            // Check if initialization is required for empty columns
             let needsInit = (!jsonStr || jsonStr.trim() === '' || jsonStr.trim() === '[]' || dueCount === undefined || dueCount === null || String(dueCount).trim() === '');
 
             let jsonArr = [];
@@ -162,6 +181,7 @@ function processAndMergeData() {
                     ...mt,
                     projectId: pid,
                     projectTitle: ptitle,
+                    shortTitle: shortTitle,
                     dueDate: dueDate,
                     completed: isCompleted,
                     notes: savedState ? savedState.notes : "",
@@ -178,6 +198,7 @@ function processAndMergeData() {
                     subCategory: '',
                     projectId: pid,
                     projectTitle: ptitle,
+                    shortTitle: shortTitle,
                     name: ct.name,
                     assignee: ct.assignee,
                     dueDate: dueDate,
@@ -187,13 +208,12 @@ function processAndMergeData() {
                 });
             });
 
-            // Trigger background save if project columns were empty on load
             if (needsInit) {
                 triggerGlideSave(pid);
             }
         });
         
-        document.getElementById('project-filter').innerHTML = projOpts;
+        projFilterEl.innerHTML = projOpts;
 
     } else {
         let activeProj = projectsData.find(p => p['$rowID'] === projectNumber || (p['2UR8V'] && p['2UR8V'] === projectNumber));
@@ -217,7 +237,6 @@ function processAndMergeData() {
         let jsonStr = activeProj['O2aWa'];
         let dueCount = activeProj['sZTch'];
 
-        // Check if initialization is required for empty columns
         let needsInit = (!jsonStr || jsonStr.trim() === '' || jsonStr.trim() === '[]' || dueCount === undefined || dueCount === null || String(dueCount).trim() === '');
 
         let jsonArr = [];
@@ -254,7 +273,6 @@ function processAndMergeData() {
             });
         });
 
-        // Trigger background save if columns were empty on load
         if (needsInit) {
             triggerGlideSave(activeProjectRowId);
         }
@@ -264,7 +282,7 @@ function processAndMergeData() {
     setHeaderLoading(false);
     renderTasks();
 
-    if (!initialRenderDone) {
+    if (!initialRenderDone && !hideCompleted) {
         initialRenderDone = true;
         scrollToFirstIncomplete();
     }
@@ -288,15 +306,17 @@ function populateAssigneeDropdown() {
 function renderTasks() {
     tasksContainer.innerHTML = '';
     
+    // Check if Global View is currently filtering for a specific project
+    let isProjFiltered = isGlobalView && projFilterEl && projFilterEl.value !== 'All';
+    let targetContextProjId = isProjFiltered ? projFilterEl.value : (isGlobalView ? null : activeProjectRowId);
+    
     let displayTasks = mergedTasks;
     if (hideCompleted) displayTasks = displayTasks.filter(t => !t.completed);
     if (currentAssigneeFilter !== 'All') {
         displayTasks = displayTasks.filter(t => (t.assignee || 'Unassigned') === currentAssigneeFilter);
     }
-    
-    const projFilterEl = document.getElementById('project-filter');
-    if (isGlobalView && projFilterEl && projFilterEl.value !== 'All') {
-        displayTasks = displayTasks.filter(t => t.projectId === projFilterEl.value);
+    if (isProjFiltered) {
+        displayTasks = displayTasks.filter(t => t.projectId === targetContextProjId);
     }
 
     if (displayTasks.length === 0) {
@@ -323,7 +343,7 @@ function renderTasks() {
     });
 
     let todayTime = new Date().setHours(0,0,0,0);
-    let lookAheadLimit = todayTime + (21 * 86400000); // Today + 21 days
+    let lookAheadLimit = todayTime + (21 * 86400000); 
 
     let dateGroups = {};
     displayTasks.forEach(task => {
@@ -356,10 +376,9 @@ function renderTasks() {
             }
         }
 
-        // Close look-ahead wrapper if we exit the zone
         if (inLookAhead && !isLookAheadBlock && d && d.getTime() > lookAheadLimit) {
             if (dayRowOpen) { htmlStr += `</div></div>`; dayRowOpen = false; }
-            htmlStr += `</div>`; // Close wrapper
+            htmlStr += `</div>`; 
             inLookAhead = false;
         }
 
@@ -371,7 +390,6 @@ function renderTasks() {
             }
         }
 
-        // Open Look-Ahead wrapper
         if (!inLookAhead && isLookAheadBlock) {
             htmlStr += `<div class="look-ahead-wrapper"><div class="look-ahead-title">3-Week Look Ahead</div>`;
             inLookAhead = true;
@@ -385,7 +403,9 @@ function renderTasks() {
             let isToday = dStr === formatDateObj(new Date());
             let isPastDueBlock = d && d.getTime() < todayTime; 
 
-            let addBtnHtml = isGlobalView || dStr === 'No Date' ? '' : `<button class="add-task-inline-btn" onclick="openAddModal('${dStr}')" data-tooltip="Add Custom Task">+</button>`;
+            // Only hide inline ADD button if in pure global view. Show if specific project is selected.
+            let hideInlineAdd = (isGlobalView && !isProjFiltered) || dStr === 'No Date';
+            let addBtnHtml = hideInlineAdd ? '' : `<button class="add-task-inline-btn" onclick="openAddModal('${dStr}', '${targetContextProjId}')" data-tooltip="Add Custom Task">+</button>`;
 
             htmlStr += `
                 <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''}">
@@ -397,10 +417,9 @@ function renderTasks() {
             `;
             currentDateStr = dStr;
             dayRowOpen = true;
-            currentCat = null; currentSub = null; // Reset nested headers for the new day block
+            currentCat = null; currentSub = null; 
         }
 
-        // Group by Category within the Day
         let catGroups = {};
         dayTasks.forEach(t => {
             let cat = t.category || 'Uncategorized';
@@ -411,13 +430,14 @@ function renderTasks() {
         });
 
         Object.keys(catGroups).forEach(cat => {
-            if (!isGlobalView && cat !== currentCat) {
+            // Hide Category Headers in Pure Global View
+            if (!(isGlobalView && !isProjFiltered) && cat !== currentCat) {
                 htmlStr += `<div class="task-category-header">${cat}</div>`;
                 currentCat = cat;
             }
             
             Object.keys(catGroups[cat]).forEach(sub => {
-                if (!isGlobalView && sub !== 'General' && sub !== '' && sub !== currentSub) {
+                if (!(isGlobalView && !isProjFiltered) && sub !== 'General' && sub !== '' && sub !== currentSub) {
                     htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
                     currentSub = sub;
                 }
@@ -429,7 +449,9 @@ function renderTasks() {
                     if (taskPastDue) rowClasses += ' past-due';
                     if (!task.completed) rowClasses += ' incomplete-target';
 
-                    let globalBadge = isGlobalView ? `<div class="task-project-badge" data-tooltip="${task.projectTitle}">${task.projectTitle}</div>` : '';
+                    // Use shortTitle for text, full projectTitle for hover hint
+                    let showBadge = isGlobalView && !isProjFiltered;
+                    let globalBadge = showBadge ? `<span class="task-project-badge" data-tooltip="${task.projectTitle}">${task.shortTitle}</span>` : '';
                     let noteBtnText = task.notes && task.notes.trim() !== '' ? 'Edit Note' : '+ Note';
 
                     htmlStr += `
@@ -484,15 +506,24 @@ window.toggleNoteField = function(taskId) {
 
 function updateHeaderStats() {
     if (isGlobalView) {
-        tasksStatus.innerText = `${mergedTasks.length} Global Tasks`;
-        return;
+        let isProjFiltered = projFilterEl && projFilterEl.value !== 'All';
+        if (!isProjFiltered) {
+            tasksStatus.innerText = `${mergedTasks.length} Global Tasks`;
+            tasksStatus.style.color = 'var(--text-secondary)';
+            return;
+        }
     }
 
     let todayTime = new Date().setHours(0,0,0,0);
     let pastDueCount = 0;
     let pendingCount = 0;
+    let contextTasks = mergedTasks;
 
-    mergedTasks.forEach(t => {
+    if (isGlobalView && projFilterEl && projFilterEl.value !== 'All') {
+        contextTasks = mergedTasks.filter(t => t.projectId === projFilterEl.value);
+    }
+
+    contextTasks.forEach(t => {
         if (!t.completed) {
             pendingCount++;
             if (t.dueDate && t.dueDate.setHours(0,0,0,0) < todayTime) {
@@ -537,7 +568,6 @@ window.updateTaskNotes = function(taskId, val) {
     }
 };
 
-// Debounced Multi-Project Background Saving
 function triggerGlideSave(targetProjectId) {
     if (!targetProjectId) return;
     
@@ -547,7 +577,7 @@ function triggerGlideSave(targetProjectId) {
     
     pendingSaveTimeout = setTimeout(() => {
         executeGlideSave();
-    }, 10000); // Wait 10 seconds after last input to batch the API request
+    }, 10000); 
 }
 
 function executeGlideSave() {
@@ -580,7 +610,7 @@ function executeGlideSave() {
         });
     });
 
-    dirtyProjects.clear(); // Reset queue
+    dirtyProjects.clear(); 
 
     fetch('https://api.glideapp.io/api/function/mutateTables', {
         method: 'POST',
@@ -600,6 +630,13 @@ function setupEventListeners() {
         viewToggleBtn.addEventListener('click', function() {
             hideCompleted = !hideCompleted;
             document.getElementById('view-toggle-text').innerText = hideCompleted ? "Show Completed" : "Hide Completed";
+            
+            if(hideCompleted) {
+                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg><span id="view-toggle-text">Show Completed</span>`;
+            } else {
+                this.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg><span id="view-toggle-text">Hide Completed</span>`;
+            }
+            
             renderTasks();
             if (!hideCompleted) scrollToFirstIncomplete();
         });
@@ -612,9 +649,8 @@ function setupEventListeners() {
         });
     }
     
-    const projFilter = document.getElementById('project-filter');
-    if (projFilter) {
-        projFilter.addEventListener('change', function() {
+    if (projFilterEl) {
+        projFilterEl.addEventListener('change', function() {
             renderTasks();
         });
     }
@@ -622,19 +658,29 @@ function setupEventListeners() {
 
 function generateId() { return 'task_' + Math.random().toString(36).substr(2, 9); }
 
-window.openAddModal = function(dateStr) {
-    if (!projectNumber || isGlobalView) return;
+window.openAddModal = function(dateStr, targetContextProjId) {
+    if (!projectNumber) return;
     
+    let isProjFiltered = isGlobalView && projFilterEl && projFilterEl.value !== 'All';
+    if (isGlobalView && !isProjFiltered) return; // Failsafe
+    
+    let activeTargetId = targetContextProjId || activeProjectRowId;
+    if (!activeTargetId) return alert("Error: Could not identify target project context.");
+
     let displayDate = "TBD";
     if (dateStr && dateStr !== 'No Date') {
         let d = new Date(dateStr + 'T00:00:00');
         displayDate = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
     }
-    document.getElementById('add-modal-title').innerText = `Add Task: ${displayDate}`;
     
+    document.getElementById('add-modal-title').innerText = `Add Task: ${displayDate}`;
     document.getElementById('add-name').value = '';
     document.getElementById('add-assignee').value = '';
     document.getElementById('add-target-date').value = dateStr;
+    
+    // Store target ID invisibly in the modal for save usage
+    document.getElementById('add-modal').setAttribute('data-target-proj', activeTargetId);
+
     modalOverlay.classList.remove('hidden');
     addModal.classList.remove('hidden');
 }
@@ -648,14 +694,16 @@ window.saveCustomTask = function() {
     const name = document.getElementById('add-name').value.trim();
     const assignee = document.getElementById('add-assignee').value.trim();
     const targetDateStr = document.getElementById('add-target-date').value;
+    const targetProjId = document.getElementById('add-modal').getAttribute('data-target-proj');
 
     if (!name) return alert("Task name is required.");
+    if (!targetProjId) return alert("System error: Missing project context.");
 
     let dueDate = (targetDateStr && targetDateStr !== 'No Date') ? new Date(targetDateStr + 'T00:00:00') : null;
 
     mergedTasks.push({
         id: generateId(),
-        projectId: activeProjectRowId,
+        projectId: targetProjId,
         category: 'Custom Tasks',
         subCategory: '',
         name: name,
@@ -669,7 +717,7 @@ window.saveCustomTask = function() {
 
     closeModals();
     renderTasks(); 
-    triggerGlideSave(activeProjectRowId);
+    triggerGlideSave(targetProjId);
 }
 
 init();
