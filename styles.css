@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.40 */
-/* Changes: Tightened UI proportions by explicitly reducing font sizes and padding across task text, assignees, checkboxes, and categories by ~2px. Redesigned .add-task-inline-btn as a borderless blue text link. Ensured global badges correctly truncate visually with data-tooltip logic. */
+/* Version: V1.41 */
+/* Description: Full Unified Stylesheet. Retains 100% of Calendar Layout parameters. Tasks tracker logic appended securely to bottom. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -235,8 +235,6 @@ body.agenda-mode #collapse-btn { display: none !important; }
 /* 2. view-events (Hide Notes) */
 .calendar-grid.view-events .event-notes { display: none !important; }
 
-/* 3. view-notes (Default: Do nothing, let everything show) */
-
 /* 3-Week Look Ahead Highlight Wrapper */
 .look-ahead-wrapper {
     position: relative;
@@ -402,8 +400,8 @@ body.agenda-mode #collapse-btn { display: none !important; }
 .agenda-day-row.empty-agenda-row { opacity: 0.5; }
 
 .agenda-day-left { width: 50px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
-.agenda-date { font-size: 1rem; font-weight: bold; color: var(--text-primary); }
-.agenda-day-name { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; }
+.agenda-date { font-size: 1.1rem; font-weight: bold; color: var(--text-primary); }
+.agenda-day-name { font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; }
 
 .agenda-daily-stats { display: flex; gap: 4px; margin-top: 8px; justify-content: center; flex-wrap: wrap; }
 .calendar-grid.hide-stats .agenda-daily-stats { display: none !important; }
@@ -533,10 +531,10 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     left: 50%;
     transform: translateX(-50%) translateY(4px);
     margin-bottom: 6px;
-    padding: 4px 6px; 
+    padding: 4px 6px; /* Reduced padding */
     background: #FFFFFF;
     color: #000000;
-    font-size: 0.65rem; 
+    font-size: 0.65rem; /* Reduced font size */
     font-weight: 700;
     white-space: nowrap;
     border-radius: 4px;
@@ -559,6 +557,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     text-align: center;
     font-weight: 500;
 }
+
 
 /* ===== TASK TRACKER SPECIFIC STYLES ===== */
 
@@ -745,4 +744,32 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 .add-task-inline-btn:hover {
     opacity: 0.7;
     background: transparent;
+}
+
+
+/* Mobile Media Queries - Shared Base & Overrides */
+@media (max-width: 768px) {
+    .header-action-row { display: flex; flex-direction: column; align-items: stretch; }
+    #project-filter { width: 100%; margin-bottom: 5px; }
+    
+    .action-buttons-group { width: 100%; justify-content: flex-start; }
+    .action-buttons-group > * { flex: 0 0 auto; }
+
+    /* Default Calendar Mobile Layout */
+    #collapse-btn { width: calc(50% - 5px); order: 3; justify-content: center; }
+    #view-toggle-btn { width: 100%; order: 1; justify-content: center; }
+    #event-type-filter { width: 100%; order: 2; }
+    #stats-toggle-btn { width: calc(50% - 5px); order: 4; justify-content: center; }
+    #upload-btn { width: calc(50% - 5px); order: 5; justify-content: center; }
+    .global-add-btn { width: calc(50% - 5px); order: 6; justify-content: center; }
+
+    /* Default Agenda Mobile Layout */
+    body.agenda-mode #event-type-filter { width: calc(50% - 5px); order: 2; }
+    body.agenda-mode #stats-toggle-btn { width: calc(50% - 5px); order: 4; }
+    body.agenda-mode #collapse-btn { display: none !important; }
+
+    /* Tasks Tracker Mobile Overrides */
+    #assignee-filter { width: 100%; order: 2; }
+    
+    .task-notes-wrapper { margin-left: 0; }
 }
