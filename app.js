@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.32
-// Description: Version bumped to remain in strict synchronization. No underlying logic overrides.
+// Version: V2.33
+// Description: Reverted dropdown sorting to chronological (oldest to newest). Perfected global project pill injection so it strictly appears on the first array card of a multi-day span without polluting event titles. Restored Accepted/Invited tooltips within event cards.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -150,6 +150,8 @@ async function fetchDatabaseData() {
             if (address) ptitle += ` - ${address}`;
             if (citySt) ptitle += `, ${citySt}`;
             if (!pt && !address && !citySt) ptitle = 'Unnamed Project';
+            
+            let shortTitle = pt ? `PT# ${pt}` : 'Project';
 
             let rawJson = row['KYRQV']; 
             projectRowIds[pid] = pid; 
@@ -172,6 +174,7 @@ async function fetchDatabaseData() {
                         evs.forEach(ev => {
                             ev.projectId = pid;
                             ev.projectTitle = ptitle;
+                            ev.shortTitle = shortTitle;
                             eventsData.push(ev);
                         });
 
@@ -216,8 +219,8 @@ function populateProjectDropdowns() {
 
     if(!filter) return;
 
-    // Sort projects newest to oldest
-    projectsList.sort((a, b) => b.startDate - a.startDate);
+    // Sort projects oldest to newest
+    projectsList.sort((a, b) => a.startDate - b.startDate);
 
     let opts = '';
     projectsList.forEach(p => {
@@ -243,7 +246,7 @@ async function saveToDatabase(targetId = projectNumber, targetTitle = projectTit
     const projectEvents = eventsData.filter(e => e.projectId === String(targetId));
     
     const cleanEvents = projectEvents.map(e => {
-        const { projectId, projectTitle, ...rest } = e;
+        const { projectId, projectTitle, shortTitle, ...rest } = e;
         return rest;
     });
 
@@ -1153,9 +1156,8 @@ function renderCalendar() {
                     `;
                 }
 
-                // Add Inline + button logic identical to tasks
                 let hideInlineAdd = (isGlobalView && !isProjFiltered) || dateStr === 'No Date';
-                let addBtnHtml = hideInlineAdd ? '' : `<button class="add-task-inline-btn" onclick="openAddModal('${dateStr}')" data-tooltip="Add Event">+</button>`;
+                let addBtnHtml = hideInlineAdd ? '' : `<button class="add-task-inline-btn" onclick="openAddModal('${dateStr}')">+</button>`;
 
                 weekHtml += `
                     <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''} ${isDayEmpty ? 'empty-agenda-row' : ''}">
@@ -1170,7 +1172,7 @@ function renderCalendar() {
                 if (isDayEmpty) {
                     weekHtml += `<div class="agenda-empty-text">No events scheduled</div>`;
                 } else {
-                    dayEvents.forEach(ev => {
+                    dayEvents.forEach((ev, idx) => {
                         let groupKey = ev.name + '|' + ev.projectId;
                         let colorIdx = uniqueGroupings.indexOf(groupKey);
                         let styleColor = palette[colorIdx % palette.length];
@@ -1195,15 +1197,14 @@ function renderCalendar() {
                         else if (blockType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
                         else showStats = true;
                         
-                        // Setup conditional Global Badge display
                         let showBadge = isGlobalView && !isProjFiltered;
-                        let globalBadge = showBadge ? `<span class="task-project-badge" data-tooltip="${ev.projectTitle}">${ev.projectTitle}</span>` : '';
+                        let globalTag = showBadge ? `<span class="project-tag" data-tooltip="${ev.projectTitle}">${ev.shortTitle || ev.projectId}</span>` : '';
                         let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
                         
                         let statsHtml = showStats ? `
                             <div class="event-stats inline-stats">
-                                <span class="stat-circle accepted-circle" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                                <span class="stat-circle invited-circle" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                                <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                                <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                             </div>
                         ` : '';
 
@@ -1216,7 +1217,7 @@ function renderCalendar() {
                                         ${titleIconHtml}
                                         ${statsHtml}
                                         <div class="event-name-target" data-full-title="${safeName}" onmouseenter="checkTruncation(this)">
-                                            <div class="event-name">${ev.name}${globalBadge}</div>
+                                            <div class="event-name">${ev.name}${globalTag}</div>
                                         </div>
                                     </div>
                                     ${notesHtml}
@@ -1383,14 +1384,14 @@ function renderCalendar() {
                     else if (evType === 'Other') titleIconHtml = `<div class="type-icon">${icons.other}</div>`;
                     else showStats = true;
                     
-                    let showBadge = isGlobalView && !isProjFiltered;
-                    let globalTag = showBadge ? `<div class="project-tag" data-tooltip="${ev.projectTitle}">${ev.projectTitle}</div>` : '';
+                    let showBadge = isGlobalView && !isProjFiltered && idx === 0;
+                    let globalTag = showBadge ? `<span class="project-tag" data-tooltip="${ev.projectTitle}">${ev.shortTitle || ev.projectId}</span>` : '';
                     let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
                     
                     let statsHtml = showStats ? `
                         <div class="event-stats inline-stats">
-                            <span class="stat-circle accepted-circle" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
-                            <span class="stat-circle invited-circle" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
+                            <span class="stat-circle accepted-circle" data-tooltip="Accepted" onclick="handleInlineEdit(event, '${ev.id}', 'accepted')">${ev.accepted}</span>
+                            <span class="stat-circle invited-circle" data-tooltip="Invited" onclick="handleInlineEdit(event, '${ev.id}', 'invited')">${ev.invited}</span>
                         </div>
                     ` : '';
 
@@ -1454,13 +1455,12 @@ function renderCalendar() {
 
 // Inline Editing for Stats
 window.handleInlineEdit = function(e, eventId, field) {
-    e.stopPropagation(); // Prevents opening the edit modal
+    e.stopPropagation(); 
     let span = e.currentTarget;
-    if (span.querySelector('input')) return; // Check if already editing
+    if (span.querySelector('input')) return; 
 
     let currentVal = span.innerText;
     
-    // Swap text for input
     span.innerHTML = `<input type="number" class="inline-edit-input" value="${currentVal}" min="0">`;
     let input = span.querySelector('input');
     input.focus();
@@ -1478,7 +1478,6 @@ window.handleInlineEdit = function(e, eventId, field) {
             if (field === 'accepted') ev.accepted = newVal;
             if (field === 'invited') ev.invited = newVal;
             
-            // Save to DB and refresh UI so header totals update instantly
             saveToDatabase(ev.projectId, ev.projectTitle);
             renderCalendar(); 
         } else {
@@ -1486,15 +1485,12 @@ window.handleInlineEdit = function(e, eventId, field) {
         }
     };
 
-    // Save on blur (clicking away) or hitting Enter
     input.addEventListener('blur', saveVal);
     input.addEventListener('keydown', (keyEvent) => {
-        if (keyEvent.key === 'Enter') {
-            saveVal();
-        }
+        if (keyEvent.key === 'Enter') saveVal();
         if (keyEvent.key === 'Escape') {
-            saved = true; // Prevents blur from double-firing
-            span.innerHTML = currentVal; // Revert
+            saved = true; 
+            span.innerHTML = currentVal; 
         }
     });
 };
