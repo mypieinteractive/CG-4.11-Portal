@@ -1,8 +1,6 @@
 // File: tasks.js
-// Version: V1.8
-// Description: Introduced ENABLE_PAST_DUE_BLOCK logic. Replaced inline notes with a dedicated editing modal. Integrated generateTaskRowHtml helper function for custom SVG checkboxes and secondary note formatting.
-
-const ENABLE_PAST_DUE_BLOCK = true; // Toggle to 'false' to revert to pure chronological sorting
+// Version: V1.9
+// Description: Removed debounce for instant state saving. Reverted sorting to oldest-newest. Built robust inline note editing engine swapping cleanly between text inputs and static secondary text blocks. 
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -15,7 +13,6 @@ const projectDateRange = document.getElementById('project-date-range');
 const tasksStatus = document.getElementById('tasks-status');
 const modalOverlay = document.getElementById('modal-overlay');
 const addModal = document.getElementById('add-modal');
-const noteModal = document.getElementById('note-modal');
 const viewToggleBtn = document.getElementById('view-toggle-btn');
 const assigneeFilter = document.getElementById('assignee-filter');
 const projFilterEl = document.getElementById('project-filter');
@@ -33,10 +30,6 @@ let mergedTasks = [];
 let activeProjectRowId = null;
 let projectStartDate = null;
 let initialRenderDone = false;
-
-// Debounce Save State
-let pendingSaveTimeout = null;
-let dirtyProjects = new Set();
 
 function init() {
     extractProjectNumber();
@@ -59,7 +52,6 @@ function extractProjectNumber() {
     const params = new URLSearchParams(window.location.search);
     projectNumber = params.get('project');
     
-    // Dynamic Background Color Injection
     let bgParam = params.get('bg');
     if (bgParam) {
         if (!bgParam.startsWith('#')) bgParam = '#' + bgParam;
@@ -109,10 +101,11 @@ async function fetchDatabaseData() {
         projectsData = result[0]?.rows || [];
         const rawTasks = result[1]?.rows || [];
 
+        // Oldest to Newest
         projectsData.sort((a, b) => {
             let dateA = a['GgPWW'] ? new Date(a['GgPWW']).getTime() : 0;
             let dateB = b['GgPWW'] ? new Date(b['GgPWW']).getTime() : 0;
-            return dateB - dateA; 
+            return dateA - dateB; 
         });
 
         masterTasks = rawTasks.map(r => ({
@@ -153,7 +146,6 @@ function processAndMergeData() {
 
     if (isGlobalView) {
         projectDateRange.innerText = "Global Active Task Overview";
-        
         let projOpts = `<option value="All">All Projects</option>`;
         
         projectsData.forEach(proj => {
@@ -176,14 +168,11 @@ function processAndMergeData() {
             projOpts += `<option value="${pid}">${ptitle}</option>`;
 
             let needsInit = (!jsonStr || jsonStr.trim() === '' || jsonStr.trim() === '[]' || dueCount === undefined || dueCount === null || String(dueCount).trim() === '');
-
             let jsonArr = [];
             try { jsonArr = JSON.parse(jsonStr) || []; } catch(e) {}
 
             masterTasks.forEach(mt => {
                 let savedState = jsonArr.find(j => j.id === mt.id);
-                let isCompleted = savedState ? !!savedState.completed : false;
-                
                 let dueDate = calculateDueDate(startStr, mt.wks);
                 mergedTasks.push({
                     ...mt,
@@ -191,7 +180,7 @@ function processAndMergeData() {
                     projectTitle: ptitle,
                     shortTitle: shortTitle,
                     dueDate: dueDate,
-                    completed: isCompleted,
+                    completed: savedState ? !!savedState.completed : false,
                     notes: savedState ? savedState.notes : "",
                     isCustom: false
                 });
@@ -244,7 +233,6 @@ function processAndMergeData() {
         let dueCount = activeProj['sZTch'];
 
         let needsInit = (!jsonStr || jsonStr.trim() === '' || jsonStr.trim() === '[]' || dueCount === undefined || dueCount === null || String(dueCount).trim() === '');
-
         let jsonArr = [];
         try { jsonArr = JSON.parse(jsonStr) || []; } catch(e) {}
 
@@ -307,8 +295,8 @@ function populateAssigneeDropdown() {
     }
 }
 
-function generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime, forcePastDueStyling = false) {
-    let taskPastDue = forcePastDueStyling || (!task.completed && task.dueDate && task.dueDate.getTime() < todayTime);
+function generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime) {
+    let taskPastDue = (!task.completed && task.dueDate && task.dueDate.getTime() < todayTime);
     let rowClasses = 'task-row';
     if (task.completed) rowClasses += ' completed';
     if (taskPastDue) rowClasses += ' past-due';
@@ -316,28 +304,42 @@ function generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime, 
 
     let globalBadge = hideHeaders ? `<span class="task-project-badge" data-tooltip="${task.projectTitle}">${task.shortTitle}</span>` : '';
     
-    let pencilIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
+    let hasNotes = task.notes && task.notes.trim() !== '';
+    let notesHtml = '';
 
-    let notesHtml = task.notes && task.notes.trim() !== '' 
-        ? `<div class="task-display-notes">${task.notes.replace(/\n/g, '<br>')}</div>` 
-        : '';
+    let pencilIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
+    let checkIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 
-    let dateFlagHtml = '';
-    if (forcePastDueStyling && task.dueDate) {
-        let m = task.dueDate.getMonth() + 1;
-        let d = task.dueDate.getDate();
-        dateFlagHtml = `<span class="task-past-due-date">Due ${m}/${d}</span>`;
+    if (hasNotes) {
+        notesHtml = `
+            <div class="task-note-display" id="note-display-${task.id}">
+                <button class="task-note-pencil" onclick="toggleNoteEditor('${task.id}', true, event)" data-tooltip="Edit Notes">${pencilIcon}</button>
+                <div class="task-note-text">${task.notes.replace(/\n/g, '<br>')}</div>
+            </div>
+            <div class="task-note-editor" id="note-editor-${task.id}" style="display: none;">
+                <input type="text" class="task-note-input-inline" id="note-input-${task.id}" value="${task.notes.replace(/"/g, '&quot;')}" onkeydown="handleNoteKeydown(event, '${task.id}')">
+                <button class="task-note-save-btn" onclick="saveInlineNote('${task.id}')">${checkIcon}</button>
+            </div>
+        `;
+    } else {
+        notesHtml = `
+            <div class="task-note-editor" id="note-editor-${task.id}" style="display: none;">
+                <input type="text" class="task-note-input-inline" id="note-input-${task.id}" placeholder="Add a note..." onkeydown="handleNoteKeydown(event, '${task.id}')">
+                <button class="task-note-save-btn" onclick="saveInlineNote('${task.id}')">${checkIcon}</button>
+            </div>
+        `;
     }
 
+    let clickableRow = !hasNotes ? `onclick="openEmptyNoteEditor('${task.id}', event)" style="cursor: pointer;"` : '';
+
     return `
-        <div class="${rowClasses}" id="row-${task.id}">
+        <div class="${rowClasses}" id="row-${task.id}" ${clickableRow}>
             <div class="task-main-line">
-                <div class="custom-checkbox ${task.completed ? 'checked' : ''}" onclick="toggleTaskComplete('${task.id}', ${!task.completed})">
+                <div class="custom-checkbox ${task.completed ? 'checked' : ''}" onclick="toggleTaskComplete('${task.id}', ${!task.completed}, event)">
                     <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
                 <div class="task-assignee-large">${task.assignee}</div>
-                <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge} ${dateFlagHtml}</div>
-                <button class="note-edit-btn" onclick="openNoteModal('${task.id}')" data-tooltip="Edit Notes">${pencilIcon}</button>
+                <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge}</div>
             </div>
             ${notesHtml}
         </div>
@@ -367,44 +369,10 @@ function renderTasks() {
 
     let todayTime = new Date().setHours(0,0,0,0);
     let htmlStr = '';
-
-    // Extractor Logic for Dedicated Past Due Block
-    let pastDueTasks = [];
-    let standardTasks = [];
-
-    if (ENABLE_PAST_DUE_BLOCK) {
-        displayTasks.forEach(t => {
-            if (!t.completed && t.dueDate && t.dueDate.getTime() < todayTime) {
-                pastDueTasks.push(t);
-            } else {
-                standardTasks.push(t);
-            }
-        });
-    } else {
-        standardTasks = displayTasks;
-    }
-
     let hideHeaders = isGlobalView && !isProjFiltered;
 
-    // Render Past Due Block First
-    if (pastDueTasks.length > 0) {
-        pastDueTasks.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
-
-        htmlStr += `
-            <div class="past-due-block-wrapper">
-                <div class="past-due-block-title">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    Past Due Action Items
-                </div>
-        `;
-        pastDueTasks.forEach(task => {
-            htmlStr += generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime, true);
-        });
-        htmlStr += `</div>`;
-    }
-
-    // Standard Flat Sort: Date -> Category -> SubCategory -> Name
-    standardTasks.sort((a, b) => {
+    // Flat Sort: Date -> Category -> SubCategory -> Name
+    displayTasks.sort((a, b) => {
         let dateA = a.dueDate ? a.dueDate.getTime() : 9999999999999;
         let dateB = b.dueDate ? b.dueDate.getTime() : 9999999999999;
         if (dateA !== dateB) return dateA - dateB;
@@ -428,7 +396,7 @@ function renderTasks() {
     let dayRowOpen = false;
 
     let dateGroups = {};
-    standardTasks.forEach(task => {
+    displayTasks.forEach(task => {
         let dStr = task.dueDate ? formatDateObj(task.dueDate) : 'No Date';
         if (!dateGroups[dStr]) dateGroups[dStr] = [];
         dateGroups[dStr].push(task);
@@ -450,7 +418,7 @@ function renderTasks() {
             if (dayRowOpen) { htmlStr += `</div></div>`; dayRowOpen = false; }
             htmlStr += `</div>`; 
             inLookAhead = false;
-            currentCat = null; currentSub = null; // Reset to force reprint
+            currentCat = null; currentSub = null; 
         }
 
         let dateChanged = dStr !== currentDateStr;
@@ -511,7 +479,7 @@ function renderTasks() {
                 }
 
                 catGroups[cat][sub].forEach(task => {
-                    htmlStr += generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime, false);
+                    htmlStr += generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime);
                 });
             });
         });
@@ -536,29 +504,51 @@ function scrollToFirstIncomplete() {
     }, 100);
 }
 
-// Modal Note Engine
-window.openNoteModal = function(taskId) {
-    let t = mergedTasks.find(x => x.id === taskId);
-    if (!t) return;
-    document.getElementById('note-task-id').value = taskId;
-    document.getElementById('note-modal-text').value = t.notes || "";
-    modalOverlay.classList.remove('hidden');
-    noteModal.classList.remove('hidden');
-}
+// Inline Note Interactive Methods
+window.openEmptyNoteEditor = function(taskId, e) {
+    if(e.target.closest('.custom-checkbox')) return;
+    let row = document.getElementById('row-' + taskId);
+    row.style.cursor = 'default';
+    row.onclick = null; 
+    let editor = document.getElementById('note-editor-' + taskId);
+    if(editor) {
+        editor.style.display = 'flex';
+        let input = editor.querySelector('input');
+        if(input) input.focus();
+    }
+};
 
-window.saveNoteModal = function() {
-    let taskId = document.getElementById('note-task-id').value;
-    let newNotes = document.getElementById('note-modal-text').value;
-    let t = mergedTasks.find(x => x.id === taskId);
-    if (t) {
-        if (t.notes !== newNotes) {
-            t.notes = newNotes;
-            triggerGlideSave(t.projectId);
-            renderTasks(); 
+window.toggleNoteEditor = function(taskId, showEditor, e) {
+    if(e) e.stopPropagation();
+    let display = document.getElementById('note-display-' + taskId);
+    let editor = document.getElementById('note-editor-' + taskId);
+    if(showEditor) {
+        if(display) display.style.display = 'none';
+        if(editor) {
+            editor.style.display = 'flex';
+            let input = editor.querySelector('input');
+            if(input) input.focus();
         }
     }
-    closeModals();
-}
+};
+
+window.handleNoteKeydown = function(e, taskId) {
+    if(e.key === 'Enter') saveInlineNote(taskId);
+};
+
+window.saveInlineNote = function(taskId) {
+    let input = document.getElementById('note-input-' + taskId);
+    if(!input) return;
+    let val = input.value.trim();
+    let t = mergedTasks.find(x => x.id === taskId);
+    if (t) {
+        if (t.notes !== val) {
+            t.notes = val;
+            triggerGlideSave(t.projectId);
+        }
+    }
+    renderTasks(); 
+};
 
 function updateHeaderStats() {
     if (isGlobalView) {
@@ -599,58 +589,42 @@ function updateHeaderStats() {
     tasksStatus.innerText = statText;
 }
 
-window.toggleTaskComplete = function(taskId, isChecked) {
+window.toggleTaskComplete = function(taskId, isChecked, e) {
+    if (e) e.stopPropagation();
     let t = mergedTasks.find(x => x.id === taskId);
     if (t) {
         t.completed = isChecked;
-        renderTasks(); 
         triggerGlideSave(t.projectId);
+        renderTasks(); 
     }
 };
 
+// Immediate Save System (Debounce Removed for strict multi-project sync)
 function triggerGlideSave(targetProjectId) {
     if (!targetProjectId) return;
     
-    dirtyProjects.add(targetProjectId);
-
-    if (pendingSaveTimeout) clearTimeout(pendingSaveTimeout);
+    let projectTasks = mergedTasks.filter(t => t.projectId === targetProjectId);
     
-    pendingSaveTimeout = setTimeout(() => {
-        executeGlideSave();
-    }, 10000); 
-}
-
-function executeGlideSave() {
-    if (dirtyProjects.size === 0) return;
-
-    let mutations = [];
-    let todayTime = new Date().setHours(0,0,0,0);
-
-    dirtyProjects.forEach(pid => {
-        let projectTasks = mergedTasks.filter(t => t.projectId === pid);
-        
-        let payloadToSave = projectTasks.map(t => {
-            if (t.isCustom) {
-                return { id: t.id, isCustom: true, name: t.name, assignee: t.assignee, targetDateStr: t.targetDateStr, completed: t.completed, notes: t.notes };
-            } else {
-                return { id: t.id, completed: t.completed, notes: t.notes };
-            }
-        });
-
-        let actionRequiredCount = projectTasks.filter(t => !t.completed && t.dueDate && t.dueDate.getTime() < todayTime).length;
-
-        mutations.push({
-            tableName: GLIDE_TABLE_ID_PROJECTS,
-            rowID: pid, 
-            kind: "set-columns-in-row",
-            columnValues: {
-                "O2aWa": JSON.stringify(payloadToSave),
-                "sZTch": String(actionRequiredCount)
-            }
-        });
+    let payloadToSave = projectTasks.map(t => {
+        if (t.isCustom) {
+            return { id: t.id, isCustom: true, name: t.name, assignee: t.assignee, targetDateStr: t.targetDateStr, completed: t.completed, notes: t.notes };
+        } else {
+            return { id: t.id, completed: t.completed, notes: t.notes };
+        }
     });
 
-    dirtyProjects.clear(); 
+    let todayTime = new Date().setHours(0,0,0,0);
+    let actionRequiredCount = projectTasks.filter(t => !t.completed && t.dueDate && t.dueDate.getTime() < todayTime).length;
+
+    const mutation = {
+        tableName: GLIDE_TABLE_ID_PROJECTS,
+        rowID: targetProjectId, 
+        kind: "set-columns-in-row",
+        columnValues: {
+            "O2aWa": JSON.stringify(payloadToSave),
+            "sZTch": String(actionRequiredCount)
+        }
+    };
 
     fetch('https://api.glideapp.io/api/function/mutateTables', {
         method: 'POST',
@@ -660,9 +634,9 @@ function executeGlideSave() {
         },
         body: JSON.stringify({ 
             appID: GLIDE_APP_ID,
-            mutations: mutations
+            mutations: [mutation]
         })
-    }).catch(err => console.error("Background Save Failed", err));
+    }).catch(err => console.error("Save Failed", err));
 }
 
 function setupEventListeners() {
@@ -702,7 +676,7 @@ window.openAddModal = function(dateStr, targetContextProjId) {
     if (!projectNumber) return;
     
     let isProjFiltered = isGlobalView && projFilterEl && projFilterEl.value !== 'All';
-    if (isGlobalView && !isProjFiltered) return; // Failsafe
+    if (isGlobalView && !isProjFiltered) return; 
     
     let activeTargetId = targetContextProjId || activeProjectRowId;
     if (!activeTargetId) return alert("Error: Could not identify target project context.");
@@ -718,7 +692,6 @@ window.openAddModal = function(dateStr, targetContextProjId) {
     document.getElementById('add-assignee').value = '';
     document.getElementById('add-target-date').value = dateStr;
     
-    // Store target ID invisibly in the modal for save usage
     document.getElementById('add-modal').setAttribute('data-target-proj', activeTargetId);
 
     modalOverlay.classList.remove('hidden');
@@ -728,7 +701,6 @@ window.openAddModal = function(dateStr, targetContextProjId) {
 window.closeModals = function() {
     modalOverlay.classList.add('hidden');
     addModal.classList.add('hidden');
-    if (noteModal) noteModal.classList.add('hidden');
 }
 
 window.saveCustomTask = function() {
