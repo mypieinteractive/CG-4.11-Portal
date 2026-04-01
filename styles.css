@@ -1,6 +1,6 @@
 /* File: styles.css */
-/* Version: V1.39 */
-/* Changes: Unified stylesheet containing all structural, modal, Calendar, Agenda, and Implementation Task Tracker layout properties. */
+/* Version: V1.40 */
+/* Changes: Tightened UI proportions by explicitly reducing font sizes and padding across task text, assignees, checkboxes, and categories by ~2px. Redesigned .add-task-inline-btn as a borderless blue text link. Ensured global badges correctly truncate visually with data-tooltip logic. */
 :root {
     --bg-color: #0A0A0A;
     --surface-color: #1E1E2F;
@@ -402,8 +402,8 @@ body.agenda-mode #collapse-btn { display: none !important; }
 .agenda-day-row.empty-agenda-row { opacity: 0.5; }
 
 .agenda-day-left { width: 50px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
-.agenda-date { font-size: 1.1rem; font-weight: bold; color: var(--text-primary); }
-.agenda-day-name { font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; }
+.agenda-date { font-size: 1rem; font-weight: bold; color: var(--text-primary); }
+.agenda-day-name { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; }
 
 .agenda-daily-stats { display: flex; gap: 4px; margin-top: 8px; justify-content: center; flex-wrap: wrap; }
 .calendar-grid.hide-stats .agenda-daily-stats { display: none !important; }
@@ -533,10 +533,10 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     left: 50%;
     transform: translateX(-50%) translateY(4px);
     margin-bottom: 6px;
-    padding: 4px 6px; /* Reduced padding */
+    padding: 4px 6px; 
     background: #FFFFFF;
     color: #000000;
-    font-size: 0.65rem; /* Reduced font size */
+    font-size: 0.65rem; 
     font-weight: 700;
     white-space: nowrap;
     border-radius: 4px;
@@ -560,7 +560,6 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     font-weight: 500;
 }
 
-
 /* ===== TASK TRACKER SPECIFIC STYLES ===== */
 
 .tasks-container {
@@ -581,7 +580,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 
 .task-category-header {
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: var(--accent-hover);
     margin-top: 15px;
@@ -597,12 +596,12 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 
 .task-subcategory-header {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--text-secondary);
     margin-top: 8px;
     margin-bottom: 6px;
-    margin-left: 65px; /* Aligns with tasks block */
+    margin-left: 65px; 
     text-transform: uppercase;
 }
 
@@ -643,8 +642,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 
 .task-checkbox-lg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     cursor: pointer;
     accent-color: var(--accent-color);
     flex-shrink: 0;
@@ -655,7 +654,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     color: var(--text-primary);
     padding: 4px 10px;
     border-radius: 6px;
-    font-size: 0.85rem;
+    font-size: 0.725rem;
     font-weight: 700;
     text-transform: uppercase;
     flex-shrink: 0;
@@ -664,7 +663,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 
 .task-name {
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 500;
     color: var(--text-primary);
     flex: 1;
@@ -676,6 +675,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 
 .task-project-badge {
+    display: inline-block;
     background: var(--accent-color);
     color: white;
     padding: 2px 6px;
@@ -684,13 +684,17 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     font-weight: 600;
     margin-left: 6px;
     vertical-align: middle;
+    max-width: 80px; /* Truncates global project titles gracefully */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .note-toggle-btn {
     background: transparent;
     border: none;
     color: var(--accent-color);
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
     padding: 4px 8px;
@@ -704,7 +708,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 
 .task-note-container {
-    padding-left: 42px; /* Indents to align under task name, past checkbox */
+    padding-left: 40px; /* Indents to align under task name, past checkbox */
     padding-right: 10px;
 }
 
@@ -715,7 +719,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
     color: var(--text-primary);
     padding: 10px 12px;
     border-radius: 6px;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-style: italic;
     resize: vertical;
     min-height: 60px;
@@ -728,49 +732,17 @@ input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; top:
 }
 
 .add-task-inline-btn {
-    background: rgba(255,255,255,0.05);
-    border: 1px dashed var(--accent-color);
+    background: transparent;
+    border: none;
     color: var(--accent-color);
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     cursor: pointer;
-    margin-top: 8px;
-    transition: background 0.2s;
+    margin-top: 2px;
+    padding: 0;
+    transition: opacity 0.2s;
 }
 
 .add-task-inline-btn:hover {
-    background: rgba(123, 97, 255, 0.15);
-}
-
-
-/* Mobile Media Queries - Shared Base & Overrides */
-@media (max-width: 768px) {
-    .header-action-row { display: flex; flex-direction: column; align-items: stretch; }
-    #project-filter { width: 100%; margin-bottom: 5px; }
-    
-    .action-buttons-group { width: 100%; justify-content: flex-start; }
-    .action-buttons-group > * { flex: 0 0 auto; }
-
-    /* Default Calendar Mobile Layout */
-    #collapse-btn { width: calc(50% - 5px); order: 3; justify-content: center; }
-    #view-toggle-btn { width: 100%; order: 1; justify-content: center; }
-    #event-type-filter { width: 100%; order: 2; }
-    #stats-toggle-btn { width: calc(50% - 5px); order: 4; justify-content: center; }
-    #upload-btn { width: calc(50% - 5px); order: 5; justify-content: center; }
-    .global-add-btn { width: calc(50% - 5px); order: 6; justify-content: center; }
-
-    /* Default Agenda Mobile Layout */
-    body.agenda-mode #event-type-filter { width: calc(50% - 5px); order: 2; }
-    body.agenda-mode #stats-toggle-btn { width: calc(50% - 5px); order: 4; }
-    body.agenda-mode #collapse-btn { display: none !important; }
-
-    /* Tasks Tracker Mobile Overrides */
-    #assignee-filter { width: 100%; order: 2; }
-    
-    .task-notes-wrapper { margin-left: 0; }
+    opacity: 0.7;
+    background: transparent;
 }
