@@ -1,6 +1,6 @@
 // File: tasks.js
-// Version: V1.9
-// Description: Removed debounce for instant state saving. Reverted sorting to oldest-newest. Built robust inline note editing engine swapping cleanly between text inputs and static secondary text blocks. 
+// Version: V1.10
+// Description: Restructured rendering loop to extract Category and Subcategory headers outside of date containers. Allows identical dates to be split into multiple containers if Categories/Subcategories change. Replaced Global project pill with inline meta text.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID_PROJECTS = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -302,7 +302,7 @@ function generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime) 
     if (taskPastDue) rowClasses += ' past-due';
     if (!task.completed) rowClasses += ' incomplete-target';
 
-    let globalBadge = hideHeaders ? `<span class="task-project-badge" data-tooltip="${task.projectTitle}">${task.shortTitle}</span>` : '';
+    let globalProjectMeta = hideHeaders ? `<div class="task-global-project-meta">${task.projectTitle}</div>` : '';
     
     let hasNotes = task.notes && task.notes.trim() !== '';
     let notesHtml = '';
@@ -334,12 +334,13 @@ function generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime) 
 
     return `
         <div class="${rowClasses}" id="row-${task.id}" ${clickableRow}>
+            ${globalProjectMeta}
             <div class="task-main-line">
                 <div class="custom-checkbox ${task.completed ? 'checked' : ''}" onclick="toggleTaskComplete('${task.id}', ${!task.completed}, event)">
                     <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
                 <div class="task-assignee-large">${task.assignee}</div>
-                <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name} ${globalBadge}</div>
+                <div class="task-name ${taskPastDue ? 'text-danger' : ''}">${task.name}</div>
             </div>
             ${notesHtml}
         </div>
@@ -395,51 +396,65 @@ function renderTasks() {
     let currentDateStr = null;
     let dayRowOpen = false;
 
-    let dateGroups = {};
-    displayTasks.forEach(task => {
+    displayTasks.forEach((task) => {
         let dStr = task.dueDate ? formatDateObj(task.dueDate) : 'No Date';
-        if (!dateGroups[dStr]) dateGroups[dStr] = [];
-        dateGroups[dStr].push(task);
-    });
+        let cat = task.category || 'Uncategorized';
+        let sub = task.subCategory || '';
 
-    Object.keys(dateGroups).forEach(dStr => {
-        let dayTasks = dateGroups[dStr];
-        let d = dStr !== 'No Date' ? new Date(dStr + 'T00:00:00') : null;
-        
-        let isLookAheadBlock = false;
-        if (d) {
-            let taskTime = d.getTime();
-            if (taskTime <= lookAheadLimit && taskTime >= todayTime) {
-                isLookAheadBlock = true;
-            }
-        }
+        let d = task.dueDate ? new Date(task.dueDate.getTime()) : null;
+        let taskTime = d ? d.getTime() : null;
+        let isLookAheadTask = taskTime !== null && taskTime >= todayTime && taskTime <= lookAheadLimit;
 
-        if (inLookAhead && !isLookAheadBlock && d && d.getTime() > lookAheadLimit) {
+        let catChanged = cat !== currentCat;
+        let subChanged = catChanged || sub !== currentSub;
+        let dateChanged = dStr !== currentDateStr;
+
+        // Exit look ahead wrapper
+        if (inLookAhead && !isLookAheadTask) {
             if (dayRowOpen) { htmlStr += `</div></div>`; dayRowOpen = false; }
             htmlStr += `</div>`; 
             inLookAhead = false;
-            currentCat = null; currentSub = null; 
-        }
-
-        let dateChanged = dStr !== currentDateStr;
-        if (dateChanged) {
-            if (dayRowOpen) {
-                htmlStr += `</div></div>`;
-                dayRowOpen = false;
-            }
-        }
-
-        if (!inLookAhead && isLookAheadBlock) {
-            htmlStr += `<div class="look-ahead-wrapper"><div class="look-ahead-title">3-Week Look Ahead</div>`;
-            inLookAhead = true;
-            currentCat = null; currentSub = null; currentDateStr = null; 
+            catChanged = true;
+            subChanged = true;
             dateChanged = true;
         }
 
-        if (dateChanged) {
+        // Close day row to print headers if boundaries shifted
+        if (dayRowOpen && (catChanged || subChanged || dateChanged)) {
+            htmlStr += `</div></div>`;
+            dayRowOpen = false;
+        }
+
+        // Enter look ahead wrapper
+        if (!inLookAhead && isLookAheadTask) {
+            htmlStr += `<div class="look-ahead-wrapper"><div class="look-ahead-title">3-Week Look Ahead</div>`;
+            inLookAhead = true;
+            catChanged = true;
+            subChanged = true;
+            dateChanged = true;
+        }
+
+        // Print Headers Between Days
+        if (catChanged) {
+            if (!hideHeaders) {
+                htmlStr += `<div class="task-category-header">${cat}</div>`;
+            }
+            currentCat = cat;
+        }
+
+        if (subChanged) {
+            if (!hideHeaders && sub !== 'General' && sub !== '') {
+                htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
+            }
+            currentSub = sub;
+        }
+
+        // Open Day Row
+        if (!dayRowOpen) {
             let dayNum = d ? d.getDate() : '';
             let monthNum = d ? d.getMonth() + 1 : '';
             let isToday = dStr === formatDateObj(new Date());
+            let isPastDueBlock = d && d.getTime() < todayTime; 
 
             let hideInlineAdd = hideHeaders || dStr === 'No Date';
             let addBtnHtml = hideInlineAdd ? '' : `<button class="add-task-inline-btn" onclick="openAddModal('${dStr}', '${targetContextProjId}')" data-tooltip="Add Custom Task">+</button>`;
@@ -447,42 +462,17 @@ function renderTasks() {
             htmlStr += `
                 <div class="agenda-day-row ${isToday ? 'today-agenda-row' : ''}">
                     <div class="agenda-day-left">
-                        <div class="agenda-date">${dStr !== 'No Date' ? monthNum+'/'+dayNum : 'TBD'}</div>
+                        <div class="agenda-date ${isPastDueBlock ? 'text-danger' : ''}">${dStr !== 'No Date' ? monthNum+'/'+dayNum : 'TBD'}</div>
                         ${addBtnHtml}
                     </div>
                     <div class="agenda-day-right">
             `;
             currentDateStr = dStr;
             dayRowOpen = true;
-            currentCat = null; currentSub = null; 
         }
 
-        let catGroups = {};
-        dayTasks.forEach(t => {
-            let cat = t.category || 'Uncategorized';
-            if (!catGroups[cat]) catGroups[cat] = {};
-            let sub = t.subCategory || 'General';
-            if (!catGroups[cat][sub]) catGroups[cat][sub] = [];
-            catGroups[cat][sub].push(t);
-        });
-
-        Object.keys(catGroups).forEach(cat => {
-            if (!hideHeaders && cat !== currentCat) {
-                htmlStr += `<div class="task-category-header">${cat}</div>`;
-                currentCat = cat;
-            }
-            
-            Object.keys(catGroups[cat]).forEach(sub => {
-                if (!hideHeaders && sub !== 'General' && sub !== '' && sub !== currentSub) {
-                    htmlStr += `<div class="task-subcategory-header">${sub}</div>`;
-                    currentSub = sub;
-                }
-
-                catGroups[cat][sub].forEach(task => {
-                    htmlStr += generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime);
-                });
-            });
-        });
+        // Print Task Card
+        htmlStr += generateTaskRowHtml(task, hideHeaders, targetContextProjId, todayTime);
     });
 
     if (dayRowOpen) htmlStr += `</div></div>`;
@@ -599,7 +589,7 @@ window.toggleTaskComplete = function(taskId, isChecked, e) {
     }
 };
 
-// Immediate Save System (Debounce Removed for strict multi-project sync)
+// Immediate Save System
 function triggerGlideSave(targetProjectId) {
     if (!targetProjectId) return;
     
