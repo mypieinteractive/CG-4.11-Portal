@@ -1,6 +1,6 @@
 // File: app.js
-// Version: V2.33
-// Description: Reverted dropdown sorting to chronological (oldest to newest). Perfected global project pill injection so it strictly appears on the first array card of a multi-day span without polluting event titles. Restored Accepted/Invited tooltips within event cards.
+// Version: V2.34
+// Description: Restored oldest-to-newest project dropdown sorting. Fixed Global View multi-day project pills to only display on the first segment. Restored Accepted/Invited tooltips to event cards. Adjusted checkTruncation to explicitly target .event-name for proper hover mechanics.
 
 const GLIDE_APP_ID = 'uptC6TQ34oTPr2dizY5O';
 const GLIDE_TABLE_ID = 'native-table-jl3zoddzYY6WxSA4YQZj';
@@ -1198,7 +1198,7 @@ function renderCalendar() {
                         else showStats = true;
                         
                         let showBadge = isGlobalView && !isProjFiltered;
-                        let globalTag = showBadge ? `<span class="project-tag" data-tooltip="${ev.projectTitle}">${ev.shortTitle || ev.projectId}</span>` : '';
+                        let globalTag = showBadge ? `<span class="task-project-badge" data-tooltip="${ev.projectTitle}">${ev.shortTitle || ev.projectId}</span>` : '';
                         let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
                         
                         let statsHtml = showStats ? `
@@ -1385,7 +1385,7 @@ function renderCalendar() {
                     else showStats = true;
                     
                     let showBadge = isGlobalView && !isProjFiltered && idx === 0;
-                    let globalTag = showBadge ? `<span class="project-tag" data-tooltip="${ev.projectTitle}">${ev.shortTitle || ev.projectId}</span>` : '';
+                    let globalTag = showBadge ? `<span class="task-project-badge" data-tooltip="${ev.projectTitle}">${ev.shortTitle || ev.projectId}</span>` : '';
                     let notesHtml = hasNotes ? `<div class="event-notes">${ev.notes}</div>` : '';
                     
                     let statsHtml = showStats ? `
